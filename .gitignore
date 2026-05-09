@@ -1,0 +1,51 @@
+# ----- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ----- Environment & secrets (NEVER commit) ---------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+secrets/
+**/credentials.json
+
+# ----- Runtime data (generated at runtime, user-specific) -------------------
+data/history.db
+data/history.db-journal
+data/outputs/*
+!data/outputs/.gitkeep
+
+# ----- Model weights (too large for git; user downloads via download.sh) ----
+idn-tts/models/*
+!idn-tts/models/.gitkeep
+
+# ----- Editor / OS ----------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*~
+
+# ----- Logs & tmp -----------------------------------------------------------
+*.log
+logs/
+tmp/
+.cache/
+
+# ----- Node / frontend (we don't use one, but safeguard) --------------------
+node_modules/
+package-lock.json

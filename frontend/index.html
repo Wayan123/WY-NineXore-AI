@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nine · Workbench</title>
+  <meta name="description" content="Developer console for the 9Router AI gateway.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- sidebar -->
+<aside class="sidebar" aria-label="Navigation">
+  <header class="brand">
+    <div class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 64 64" width="28" height="28">
+        <g stroke="currentColor" stroke-width="3.2" stroke-linecap="round">
+          <line x1="14" y1="32" x2="14" y2="32"/>
+          <line x1="22" y1="26" x2="22" y2="38"/>
+          <line x1="30" y1="20" x2="30" y2="44"/>
+          <line x1="38" y1="24" x2="38" y2="40"/>
+          <line x1="46" y1="28" x2="46" y2="36"/>
+        </g>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <h1>Nine<span> · Workbench</span></h1>
+      <p class="tag">9Router console</p>
+    </div>
+  </header>
+
+  <nav class="nav" id="nav">
+    <a href="#/" data-view="home" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 6l5-4 5 4v6H2z"/></svg>
+      </span>Home
+    </a>
+
+    <div class="nav-section">Make</div>
+    <a href="#/chat" data-view="chat" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 3h10v6H5l-3 3z"/></svg>
+      </span>Chat
+    </a>
+    <a href="#/image" data-view="image" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="1.5" y="2.5" width="11" height="9" rx="1"/><circle cx="5" cy="6" r="1.2"/><path d="M2 10l3-3 3 3 2-2 3 3"/></svg>
+      </span>Image
+    </a>
+    <a href="#/tts" data-view="tts" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><line x1="3" y1="7" x2="3" y2="7"/><line x1="5.5" y1="5" x2="5.5" y2="9"/><line x1="8" y1="3" x2="8" y2="11"/><line x1="10.5" y1="5" x2="10.5" y2="9"/></svg>
+      </span>Speak
+    </a>
+    <a href="#/stt" data-view="stt" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="5.5" y="2" width="3" height="6" rx="1.5"/><path d="M3 7a4 4 0 0 0 8 0"/><line x1="7" y1="11" x2="7" y2="12.5"/></svg>
+      </span>Transcribe
+    </a>
+    <a href="#/vision" data-view="vision" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M1 7c2.5-3.5 5-5 6-5s3.5 1.5 6 5c-2.5 3.5-5 5-6 5s-3.5-1.5-6-5z"/><circle cx="7" cy="7" r="2.2"/></svg>
+      </span>Vision / OCR
+    </a>
+
+    <div class="nav-section">Know</div>
+    <a href="#/embed" data-view="embed" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="4" cy="7" r="2.2"/><circle cx="10" cy="7" r="2.2"/><path d="M6 7h2"/></svg>
+      </span>Embeddings
+    </a>
+    <a href="#/search" data-view="search" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="6" r="3.5"/><line x1="8.5" y1="8.5" x2="12" y2="12"/></svg>
+      </span>Search
+    </a>
+    <a href="#/fetch" data-view="fetch" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 2v8m-3-3l3 3 3-3M2 12h10"/></svg>
+      </span>Read URL
+    </a>
+
+    <div class="nav-section">Tools</div>
+    <a href="#/models" data-view="models" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="2" y1="10" x2="12" y2="10"/></svg>
+      </span>Models
+    </a>
+    <a href="#/history" data-view="history" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="5.2"/><path d="M7 4v3l2 1.5"/></svg>
+      </span>History
+    </a>
+    <a href="#/settings" data-view="settings" class="nav-item">
+      <span class="ico" aria-hidden="true">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="1.8"/><path d="M7 2v1.5m0 7V12M2 7h1.5m7 0H12M3.5 3.5l1 1m5 5l1 1m0-6l-1 1m-5 5l-1 1"/></svg>
+      </span>Settings
+    </a>
+  </nav>
+
+  <footer class="sidebar-foot">
+    <div class="status" id="statusDot" title="upstream status">
+      <span class="dot"></span>
+      <span class="label">checking…</span>
+    </div>
+    <div class="status" id="idnTtsDot" title="Indonesian TTS status" style="margin-top: 6px;">
+      <span class="dot"></span>
+      <span class="label">idn-tts —</span>
+    </div>
+    <small class="upstream" id="upstreamUrl">—</small>
+  </footer>
+</aside>
+
+<!-- main -->
+<main class="main" id="main" tabindex="-1">
+  <section class="view" data-view="home" id="view-home"></section>
+  <section class="view" data-view="chat" id="view-chat" hidden></section>
+  <section class="view" data-view="image" id="view-image" hidden></section>
+  <section class="view" data-view="tts" id="view-tts" hidden></section>
+  <section class="view" data-view="stt" id="view-stt" hidden></section>
+  <section class="view" data-view="vision" id="view-vision" hidden></section>
+  <section class="view" data-view="embed" id="view-embed" hidden></section>
+  <section class="view" data-view="search" id="view-search" hidden></section>
+  <section class="view" data-view="fetch" id="view-fetch" hidden></section>
+  <section class="view" data-view="models" id="view-models" hidden></section>
+  <section class="view" data-view="history" id="view-history" hidden></section>
+  <section class="view" data-view="settings" id="view-settings" hidden></section>
+</main>
+
+<!-- toast host -->
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<!-- modal host -->
+<div class="modal-root" id="modal" hidden>
+  <div class="modal-backdrop" data-close></div>
+  <div class="modal-card" role="dialog" aria-modal="true" tabindex="-1">
+    <button class="modal-close" data-close aria-label="Close">✕</button>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script type="module" src="/assets/app.js"></script>
+</body>
+</html>
