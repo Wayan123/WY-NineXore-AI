@@ -33,12 +33,30 @@ Every panel renders on a dark canvas with a single lavender accent. Click any th
 
 ### Audio samples
 
-Each file below is the Coqui VITS output at speed `1.20×` (the dashboard default), ~5 s long, ~100 KB:
+Click ▶ to play in the browser. Each clip is Coqui VITS at speed `1.20×` (the dashboard default).
 
-- [`docs/samples/tts-wibowo.mp3`](docs/samples/tts-wibowo.mp3) — Wibowo (default, audiobook voice)
-- [`docs/samples/tts-ardi.mp3`](docs/samples/tts-ardi.mp3) — Ardi (Azure-trained)
-- [`docs/samples/tts-gadis.mp3`](docs/samples/tts-gadis.mp3) — Gadis (Azure-trained, female)
-- [`docs/samples/tts-user-demo.mp3`](docs/samples/tts-user-demo.mp3) — a longer free-form demo
+<table>
+  <tr>
+    <td align="center" width="33%"><b>Wibowo</b><br>audiobook, default</td>
+    <td align="center" width="33%"><b>Ardi</b><br>Azure-trained</td>
+    <td align="center" width="33%"><b>Gadis</b><br>Azure-trained, female</td>
+  </tr>
+  <tr>
+    <td><video src="docs/samples/tts-wibowo.mp4" controls width="100%"></video></td>
+    <td><video src="docs/samples/tts-ardi.mp4"   controls width="100%"></video></td>
+    <td><video src="docs/samples/tts-gadis.mp4"  controls width="100%"></video></td>
+  </tr>
+</table>
+
+A longer free-form demo:
+
+<video src="docs/samples/tts-user-demo.mp4" controls width="100%"></video>
+
+Prefer raw MP3? Right-click any of these and pick “Save link as”:
+[wibowo](docs/samples/tts-wibowo.mp3) ·
+[ardi](docs/samples/tts-ardi.mp3) ·
+[gadis](docs/samples/tts-gadis.mp3) ·
+[user demo](docs/samples/tts-user-demo.mp3).
 
 ### Vision / OCR sample
 
