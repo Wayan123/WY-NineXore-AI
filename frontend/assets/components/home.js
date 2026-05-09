@@ -52,15 +52,18 @@ export async function mount(root) {
 
     // hero
     root.append(el('section', { class: 'hero' },
-      el('span', { class: 'badge-uppercase accent' }, 'Workbench'),
+      el('span', { class: 'badge-uppercase accent' }, 'WY NineXore AI'),
       el('h2', { style: { marginTop: '10px' } },
         'Developer console for ',
         el('span', { class: 'ink-soft' }, 'the 9Router gateway.')),
-      el('p', {}, 'Chat, images, speech, transcription, embeddings, and web search — every 9Router capability in one local console. Indonesian TTS runs alongside as a separate CUDA service.'),
+      el('p', {},
+        'A local workbench that collects every 9Router capability in one window — chat, images, speech, transcription, embeddings, web search, and multimodal OCR. ',
+        'Bahasa Indonesia TTS and offline Whisper run alongside as a separate CUDA service.',
+      ),
       el('div', { class: 'btn-row' },
         el('a', { class: 'btn btn-primary', href: '#/tts' }, 'Try Bahasa TTS'),
         el('a', { class: 'btn', href: '#/chat' }, 'Open chat'),
-        el('a', { class: 'btn btn-ghost', href: '#/models' }, 'Browse models →'),
+        el('a', { class: 'btn btn-ghost', href: '#/help' }, 'Help & manual →'),
       ),
     ));
 
@@ -158,6 +161,33 @@ export async function mount(root) {
       recentWrap.append(el('div', { class: 'muted' }, 'Could not load history.'));
       toastError(e, 'History');
     }
+
+    // --- About -------------------------------------------------------
+    root.append(el('div', { class: 'page-head mt-lg' },
+      el('div', {},
+        el('h2', {}, 'About'),
+        el('p', { class: 'sub' }, 'Where this workbench comes from.'),
+      ),
+    ));
+    root.append(el('div', { class: 'card' },
+      el('p', {},
+        el('strong', {}, 'WY NineXore AI'),
+        ' is a local developer console I built on top of ',
+        el('a', { href: 'https://github.com/decolua/9router', target: '_blank', rel: 'noopener' }, '9Router'),
+        ' — an open-source OpenAI-compatible gateway that unifies access to many AI providers. ',
+        'This repository does not ship any provider keys; every external call goes through your own 9Router instance, which holds the Codex (OpenAI Plus), NVIDIA NIM, DeepSeek, Anthropic, Tavily, Firecrawl, and other credentials you configure there.',
+      ),
+      el('p', {}, 'In addition to the gateway, a small optional CUDA service runs in this repo to provide offline Bahasa Indonesia voices (Coqui VITS, 83 speakers) and offline English/Indonesian transcription (Whisper large-v3). Audio in those paths stays on your machine.'),
+      el('p', { class: 'muted', style: { fontSize: '13px' } },
+        'Source: ',
+        el('a', { href: 'https://github.com/Wayan123/WY-NineXore-AI', target: '_blank', rel: 'noopener' }, 'github.com/Wayan123/WY-NineXore-AI'),
+        ' · License: MIT (this repo); the Coqui Indonesian TTS model weights are non-commercial per upstream terms.',
+      ),
+      el('div', { class: 'btn-row mt-sm' },
+        el('a', { class: 'btn btn-small', href: '#/help' }, 'Read the manual'),
+        el('a', { class: 'btn btn-ghost btn-small', href: 'https://github.com/decolua/9router', target: '_blank', rel: 'noopener' }, '9Router on GitHub ↗'),
+      ),
+    ));
   };
 
   await render();

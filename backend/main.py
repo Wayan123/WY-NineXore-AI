@@ -63,11 +63,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="9Router Dashboard",
-    version="0.1.0",
+    title="WY NineXore AI",
+    version="0.2.0",
     description=(
-        "A friendly web UI over the 9Router AI gateway. Chat, images, "
-        "TTS, STT, embeddings, web search & fetch — all in one tab."
+        "Developer console for the 9Router AI gateway. "
+        "Chat, images, TTS (Coqui Indonesian + upstream), STT (local Whisper + upstream), "
+        "embeddings, web search, URL fetch, and multimodal image → text."
     ),
     lifespan=lifespan,
 )

@@ -99,6 +99,22 @@ async function render(root) {
     )),
   ));
 
+  // About card
+  root.append(el('div', { class: 'card mt-md' },
+    el('h3', {}, 'About'),
+    el('p', { class: 'muted', style: { fontSize: '13px', margin: '0 0 8px' } },
+      'WY NineXore AI is a local developer console built on top of ',
+      el('a', { href: 'https://github.com/decolua/9router', target: '_blank', rel: 'noopener' }, '9Router'),
+      ' — an open-source OpenAI-compatible gateway. All external provider credentials (Codex / OpenAI Plus, NVIDIA NIM, DeepSeek, Anthropic, Tavily, Firecrawl, etc.) live inside your 9Router instance, not in this repository.'),
+    el('p', { class: 'muted', style: { fontSize: '13px', margin: '0 0 8px' } },
+      'An optional local CUDA service adds Bahasa Indonesia voices (Coqui VITS) and offline Whisper transcription — audio stays on your machine.'),
+    el('div', { class: 'inline', style: { gap: '10px', flexWrap: 'wrap' } },
+      el('a', { class: 'btn btn-small', href: 'https://github.com/Wayan123/WY-NineXore-AI', target: '_blank', rel: 'noopener' }, 'Source repo ↗'),
+      el('a', { class: 'btn btn-small', href: 'https://github.com/decolua/9router', target: '_blank', rel: 'noopener' }, '9Router ↗'),
+      el('a', { class: 'btn btn-ghost btn-small', href: '#/help' }, 'User manual'),
+    ),
+  ));
+
   // Live health (raw JSON) card
   const probeHost = el('div', { class: 'card mt-md' },
     el('h3', {}, 'Live probe'),

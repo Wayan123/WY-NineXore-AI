@@ -14,6 +14,7 @@ const VIEWS = {
   fetch:    () => import('./components/fetch.js'),
   models:   () => import('./components/models.js'),
   history:  () => import('./components/history.js'),
+  help:     () => import('./components/help.js'),
   settings: () => import('./components/settings.js'),
 };
 
@@ -46,7 +47,10 @@ async function showView(name) {
 
 function parseRoute() {
   const h = location.hash.replace(/^#\/?/, '');
-  return h.split('/')[0] || 'home';
+  // route = everything up to the first '/' or '#' (the latter lets in-page
+  // anchors like #/help#overview still work).
+  const route = h.split(/[/#]/)[0] || 'home';
+  return route;
 }
 
 window.addEventListener('hashchange', () => showView(parseRoute()));
@@ -90,7 +94,7 @@ setInterval(refreshUpstream, 30_000);
 // ---- keyboard shortcuts ----------------------------------------------------
 const NAV_MAP = { h: 'home', c: 'chat', i: 'image', t: 'tts', r: 'stt',
                   v: 'vision', e: 'embed', s: 'search', f: 'fetch',
-                  m: 'models', y: 'history', ',': 'settings' };
+                  m: 'models', y: 'history', '?': 'help', ',': 'settings' };
 
 function isTypingTarget(target) {
   const tag = (target?.tagName || '').toLowerCase();

@@ -1,6 +1,11 @@
 // Vision / OCR view — upload an image, pick a vision-capable chat model,
 // get text back. Routes through /api/vision/extract which wraps the image
 // into a multimodal /v1/chat/completions call.
+//
+// The model dropdown is deliberately narrow: only IDs known to accept
+// multimodal `image_url` content blocks end up in the list. Claude proxies
+// that silently drop images, text-only NIM GLM, and code-focused Codex
+// variants are excluded even though they appear in the chat catalogue.
 import { apiGet, apiForm, apiDelete } from '../api.js';
 import { modelList, refreshKind } from '../store.js';
 import { clear, copyToClipboard, el, empty, fmtBytes, fmtDate, loading, toastError, toastGood, toastWarn } from '../ui.js';
@@ -22,27 +27,41 @@ function savePrefs() {
   localStorage.setItem(LS, JSON.stringify({ model, prompt, max_tokens, temperature }));
 }
 
-// Known vision-capable chat models on typical 9Router deploys.
-// Empty = fall back to filtered chat list.
-const KNOWN_VISION = [
-  'cx/gpt-5.4',
+// ---- strict vision allowlist -------------------------------------------
+//
+// We enumerate only models that have been observed to honour
+// `image_url` content blocks on the 9Router providers we target. The
+// order here is the order in the dropdown — put the reliable ones first.
+const VISION_MODELS = [
+  // OpenAI GPT-5.x via Codex / ChatGPT Plus — confirmed vision-capable
   'cx/gpt-5.5',
+  'cx/gpt-5.4',
   'cx/gpt-5.2',
   'cx/gpt-5.1',
-  'kr/claude-sonnet-4.5',
-  'kr/claude-opus-4.7',
+  'cx/gpt-5',
+  // Anthropic Claude directly (not the kr/ proxy, which drops images)
+  'anthropic/claude-opus-4-7',
+  'anthropic/claude-sonnet-4-5',
+  'anthropic/claude-haiku-4-5',
+  'cc/claude-opus-4-7',
+  'cc/claude-sonnet-4-5',
+  // Gemini and Qwen VL variants (surface these only if the instance exposes them)
+  'gemini/gemini-2.5-pro',
+  'gemini/gemini-2.5-flash',
+  'openrouter/qwen/qwen2-vl-72b-instruct',
+  'openrouter/qwen/qwen-vl-max',
+  // NVIDIA NIM vision-language endpoints (observed; add more as they appear)
+  'nvidia/meta/llama-3.2-11b-vision-instruct',
+  'nvidia/meta/llama-3.2-90b-vision-instruct',
 ];
 
+// Filter the `chat` catalogue down to IDs that actually exist on this instance
+// AND sit in the allowlist. Preserve allowlist order (most reliable first).
 function pickVisionModels(allChat) {
-  const ids = new Set(allChat.map(m => m.id));
-  const order = KNOWN_VISION.filter(id => ids.has(id));
-  const rest = allChat
-    .filter(m => !order.includes(m.id))
-    .filter(m => /cx\/|claude|gemini|gpt-4|gpt-5|glm/i.test(m.id));
-  return [
-    ...order.map(id => allChat.find(m => m.id === id)),
-    ...rest,
-  ];
+  const exposed = new Set(allChat.map(m => m.id));
+  return VISION_MODELS
+    .filter(id => exposed.has(id))
+    .map(id => allChat.find(m => m.id === id));
 }
 
 export async function mount(root) {
@@ -56,9 +75,9 @@ async function buildView(root) {
 
   const allChat = modelList('chat');
   const visionChoices = pickVisionModels(allChat);
-  const availableIds = new Set(allChat.map(m => m.id));
-  if (!state.model || !availableIds.has(state.model)) {
-    state.model = visionChoices[0]?.id || allChat[0]?.id || '';
+  const visionIds = new Set(visionChoices.map(m => m.id));
+  if (!state.model || !visionIds.has(state.model)) {
+    state.model = visionChoices[0]?.id || '';
     savePrefs();
   }
 
@@ -83,12 +102,23 @@ async function buildView(root) {
     ),
   ));
 
-  // Status callout — keep it short, just a model hint
-  root.append(el('div', { class: 'callout' },
-    el('strong', {}, 'Tip'),
-    ' — ', el('code', {}, 'cx/gpt-5.4'), ' reads Indonesian text cleanly. Use the ',
-    el('code', {}, 'translate-id'), ' prompt to translate foreign text into Bahasa.',
-  ));
+  // Status callout — honest about model coverage
+  if (!visionChoices.length) {
+    root.append(el('div', { class: 'callout warn' },
+      el('strong', {}, 'No multimodal chat models detected'),
+      ' — this instance of 9Router doesn’t expose any model that accepts images. ',
+      'Configure the Codex (', el('code', {}, 'cx/gpt-5.4'),
+      '), Anthropic (', el('code', {}, 'anthropic/claude-*'),
+      '), or Gemini providers in 9Router to enable OCR.',
+    ));
+  } else {
+    root.append(el('div', { class: 'callout' },
+      el('strong', {}, 'Tip'),
+      ' — ', el('code', {}, visionChoices[0].id),
+      ' reads Indonesian text cleanly. Use the ',
+      el('code', {}, 'translate-id'), ' prompt to translate foreign text into Bahasa.',
+    ));
+  }
 
   // --- form ------------------------------------------------------------
   const modelSel = el('select', {
@@ -100,7 +130,8 @@ async function buildView(root) {
     modelSel.append(o);
   }
   if (!visionChoices.length) {
-    modelSel.append(el('option', { value: '' }, '— no chat models —'));
+    modelSel.append(el('option', { value: '' }, '— no multimodal model available —'));
+    modelSel.disabled = true;
   }
 
   const promptTA = el('textarea', {
@@ -150,6 +181,7 @@ async function buildView(root) {
   const preview = el('div', { class: 'mt-sm' });
 
   const goBtn = el('button', { class: 'btn btn-primary', onclick: submit }, 'Extract');
+  if (!visionChoices.length) goBtn.disabled = true;
   const status = el('div', { class: 'muted' });
 
   root.append(el('div', { class: 'card' },
