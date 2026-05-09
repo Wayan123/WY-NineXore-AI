@@ -33,7 +33,7 @@ Every panel renders on a dark canvas with a single lavender accent. Click any th
 
 ### Audio samples
 
-Click ▶ to play in the browser. Each clip is Coqui VITS at speed `1.20×` (the dashboard default).
+Click ▶ to play in the browser. Each clip is Coqui VITS at speed `1.20×` (the dashboard default), rendered with a lavender waveform that matches the UI.
 
 <table>
   <tr>
@@ -51,12 +51,6 @@ Click ▶ to play in the browser. Each clip is Coqui VITS at speed `1.20×` (the
 A longer free-form demo:
 
 <video src="docs/samples/tts-user-demo.mp4" controls width="100%"></video>
-
-Prefer raw MP3? Right-click any of these and pick “Save link as”:
-[wibowo](docs/samples/tts-wibowo.mp3) ·
-[ardi](docs/samples/tts-ardi.mp3) ·
-[gadis](docs/samples/tts-gadis.mp3) ·
-[user demo](docs/samples/tts-user-demo.mp3).
 
 ### Vision / OCR sample
 

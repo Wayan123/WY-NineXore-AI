@@ -35,14 +35,12 @@ for voice in wibowo ardi gadis; do
     -H 'Content-Type: application/json' \
     -d "{\"text\":$(printf '%s' "$text" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))'),\"speaker\":\"$voice\",\"speed\":1.2}" \
     -o "$OUT/tts-$voice.wav"
-  # Compress to mp3 so the repo doesn't carry ~400 KB WAVs for each sample.
-  ffmpeg -loglevel error -y -i "$OUT/tts-$voice.wav" -codec:a libmp3lame -b:a 96k "$OUT/tts-$voice.mp3"
-  # Also emit an mp4 with a lavender waveform visualization. GitHub renders
-  # <video> tags inline in README, so these give one-click playback in the
-  # browser without forcing a download.
+  # Emit an mp4 with a lavender waveform visualisation. GitHub renders
+  # <video> tags inline in README, so one file gives click-to-play in the
+  # browser without forcing a download, and doubles as an audio artefact.
   dur=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$OUT/tts-$voice.wav" | cut -d. -f1)
   dur=$((dur + 1))
-  ffmpeg -loglevel error -y -i "$OUT/tts-$voice.mp3" \
+  ffmpeg -loglevel error -y -i "$OUT/tts-$voice.wav" \
     -filter_complex "color=c=0x0f1113:s=640x120:d=$dur[bg];[0:a]showwaves=s=640x120:mode=line:rate=15:colors=0x8b90f0:draw=full[wave];[bg][wave]overlay=shortest=1,format=yuv420p[v]" \
     -map "[v]" -map 0:a \
     -c:v libx264 -preset veryfast -crf 32 \
@@ -51,7 +49,7 @@ for voice in wibowo ardi gadis; do
     -shortest \
     "$OUT/tts-$voice.mp4"
   rm -f "$OUT/tts-$voice.wav"
-  echo "  ✓ $OUT/tts-$voice.mp3 + .mp4"
+  echo "  ✓ $OUT/tts-$voice.mp4  ($(stat -c %s "$OUT/tts-$voice.mp4") bytes)"
 done
 
 # Also copy the Vision OCR sample image that gets used in the screenshots.
