@@ -12,6 +12,44 @@ Built in Python (FastAPI) + vanilla ES-module JS. No build tool.
 
 ---
 
+## Screenshots
+
+Every panel renders on a dark canvas with a single lavender accent. Click any thumbnail to open the full-resolution capture.
+
+<p align="center">
+  <img src="docs/assets/home.jpg"     alt="Home — status, capabilities grid, recent activity"       width="100%">
+</p>
+
+| | | |
+|:--:|:--:|:--:|
+| ![Chat](docs/assets/chat.jpg)         | ![Speak (TTS)](docs/assets/tts.jpg)          | ![Transcribe (STT)](docs/assets/stt.jpg)         |
+| **Chat** — streaming, sessions, markdown | **Speak** — Coqui Indonesian TTS + speed slider | **Transcribe** — offline Whisper large-v3 |
+| ![Vision / OCR](docs/assets/vision.jpg) | ![Image](docs/assets/image.jpg)            | ![Embeddings](docs/assets/embed.jpg) |
+| **Vision / OCR** — multimodal extraction  | **Image** — text → image via Codex            | **Embeddings** — cosine similarity matrix |
+| ![Search](docs/assets/search.jpg)       | ![Read URL](docs/assets/fetch.jpg)         | ![Models](docs/assets/models.jpg) |
+| **Search** — one API, many providers      | **Read URL** — URL → markdown / text / HTML     | **Models** — live catalogue from 9Router |
+| ![History](docs/assets/history.jpg)     | ![Settings](docs/assets/settings.jpg)      | ![Help](docs/assets/help.jpg) |
+| **History** — everything, filterable      | **Settings** — effective config + status       | **Help** — in-app Indonesian-friendly manual |
+
+### Audio samples
+
+Each file below is the Coqui VITS output at speed `1.20×` (the dashboard default), ~5 s long, ~100 KB:
+
+- [`docs/samples/tts-wibowo.mp3`](docs/samples/tts-wibowo.mp3) — Wibowo (default, audiobook voice)
+- [`docs/samples/tts-ardi.mp3`](docs/samples/tts-ardi.mp3) — Ardi (Azure-trained)
+- [`docs/samples/tts-gadis.mp3`](docs/samples/tts-gadis.mp3) — Gadis (Azure-trained, female)
+- [`docs/samples/tts-user-demo.mp3`](docs/samples/tts-user-demo.mp3) — a longer free-form demo
+
+### Vision / OCR sample
+
+Input image that produced the “Selamat datang di NineXore AI” OCR you see in the Vision screenshot:
+
+<p align="center">
+  <img src="docs/samples/vision-input.png" alt="Sample OCR input" width="640">
+</p>
+
+---
+
 ## Architecture at a glance
 
 Two local processes + your external 9Router instance. Both local processes
