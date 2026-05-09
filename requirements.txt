@@ -1,3 +1,18 @@
+# Python dependencies for WY NineXore AI.
+#
+# Everything runs inside a single conda env (default name: ``torch-gpu``).
+# Torch/torchaudio are NOT listed below because the right wheel depends on
+# your CUDA driver version. Install them first, e.g.
+#
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+#
+# Replace ``cu128`` with ``cu121``/``cu124``/``cpu``/... as appropriate.
+# See docs/SETUP.md.
+#
+# Then install the rest:
+#   pip install -r requirements.txt
+
+# --- Dashboard backend ------------------------------------------------------
 fastapi>=0.110
 uvicorn[standard]>=0.30
 httpx>=0.27
@@ -6,6 +21,15 @@ pydantic-settings>=2.3
 python-multipart>=0.0.9
 python-dotenv>=1.0
 
-# dev (optional — used by `pytest tests/`)
+# --- Local ML service (Coqui TTS + Whisper STT) -----------------------------
+coqui-tts>=0.27
+g2p-id==0.0.4
+transformers>=4.40
+accelerate>=0.30
+soundfile>=0.12
+librosa>=0.10
+numpy
+
+# --- Dev / test -------------------------------------------------------------
 pytest>=8.0
 pytest-asyncio>=0.23

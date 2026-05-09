@@ -385,9 +385,10 @@ function renderIdnCard(idn) {
   if (!idn.reachable) {
     return el('div', { class: 'callout warn' },
       el('strong', {}, 'Indonesian TTS unreachable'),
-      ' at ', el('code', {}, idn.url), '. Start it with ',
-      el('code', {}, 'cd idn-tts && ./run.sh'),
-      ' — then press ↻ refresh voices above.',
+      ' at ', el('code', {}, idn.url), '. Check log ',
+      el('code', {}, '/tmp/wy-nine-idn-tts.log'),
+      ' and restart ', el('code', {}, './run.sh'),
+      '. Press ↻ refresh voices once it\'s back.',
     );
   }
   const voice = idn.default_speaker || 'wibowo';

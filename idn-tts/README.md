@@ -1,13 +1,16 @@
-# Indonesian TTS service
+# Indonesian TTS + Whisper STT service
 
-A small FastAPI wrapper around [Wikidepia/indonesian-tts](https://github.com/Wikidepia/indonesian-tts) (VITS model fine-tuned on Indonesian audiobook + Azure TTS data).
+A small FastAPI wrapper around [Wikidepia/indonesian-tts](https://github.com/Wikidepia/indonesian-tts) (Coqui VITS, 83 Bahasa voices) and `openai/whisper-large-v3` for offline transcription.
 
-Runs alongside the main dashboard. The dashboard's TTS panel automatically sees its voices when the service is reachable.
+Normally **you don't run this script directly** — the root `./run.sh` spawns it
+alongside the dashboard, inside the same `torch-gpu` conda env. Use this
+script only when you want to restart or debug the ML service in isolation,
+or host it on a different machine than the dashboard.
 
 - **License note (Wikidepia):** _DO NOT USE FOR COMMERCIAL PURPOSES._
-- Needs the `torch-gpu` conda env (or any env with PyTorch + CUDA; CPU works but is slow).
+- Requires the `torch-gpu` conda env (or any env with PyTorch + CUDA; CPU works but is slow).
 
-## Install + run
+## Run standalone
 
 ```bash
 cd idn-tts

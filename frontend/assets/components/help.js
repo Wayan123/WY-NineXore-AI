@@ -5,7 +5,7 @@ import { el } from '../ui.js';
 
 const TOC = [
   { id: 'overview',     title: 'Overview — apa itu NineXore AI?' },
-  { id: 'architecture', title: 'Architecture — 3 layanan lokal' },
+  { id: 'architecture', title: 'Architecture — 2 proses lokal + 9Router' },
   { id: 'chat',         title: 'Chat panel' },
   { id: 'image',        title: 'Image panel' },
   { id: 'tts',          title: 'Speak / TTS panel' },
@@ -124,16 +124,16 @@ function overview() {
       '. Semua panel di sini \u2014 chat, image, speak, transcribe, vision, embeddings, search, fetch \u2014 memanggil provider melalui satu instance 9Router yang Anda jalankan sendiri.'),
     p('Repository ini tidak pernah menyimpan API key provider. Satu-satunya rahasia yang dipakai adalah ',
       code('NINEROUTER_KEY'), ' yang tersimpan di file ', code('.env'), ' lokal (di-ignore oleh git).'),
-    p('Dua layanan CUDA opsional di folder ', code('idn-tts/'), ' menambah suara Bahasa Indonesia (Coqui VITS, 83 suara) dan transkripsi offline (Whisper large-v3). Audio di jalur ini tidak pernah meninggalkan mesin Anda.'),
+    p('Satu service CUDA opsional di folder ', code('idn-tts/'), ' menambah suara Bahasa Indonesia (Coqui VITS, 83 suara) dan transkripsi offline (Whisper large-v3). Normalnya dijalankan otomatis oleh ', code('./run.sh'), ' di dalam conda env ', code('torch-gpu'), ' yang sama dengan dashboard — tidak perlu perintah terpisah. Audio di jalur ini tidak pernah meninggalkan mesin Anda.'),
   );
 }
 
 function architecture() {
   return section('architecture', 'Architecture',
-    p('Tiga proses bekerja sama:'),
+    p('Dua proses lokal + 9Router eksternal. Kedua proses lokal jalan di ', b('satu conda env yang sama'), ' (', code('torch-gpu'), ') dan dinyalakan oleh ', b('satu ./run.sh'), ':'),
     ul(
-      el('span', {}, b('Dashboard backend'), ' (conda ', code('info-ai'), ', port 8765) \u2014 FastAPI tipis yang proxy ke 9Router dan menyimpan history di SQLite.'),
-      el('span', {}, b('Local ML service'), ' (conda ', code('torch-gpu'), ', port 21128) \u2014 Coqui VITS + Whisper yang lazy-load di CUDA.'),
+      el('span', {}, b('Dashboard backend'), ' (port 8765) \u2014 FastAPI tipis yang proxy ke 9Router dan menyimpan history di SQLite.'),
+      el('span', {}, b('Local ML service'), ' (port 21128) \u2014 Coqui VITS (boot-load) + Whisper (lazy-load saat request pertama).'),
       el('span', {}, b('9Router gateway'), ' (port 20128, Anda jalankan terpisah) \u2014 menyimpan kredensial provider (OpenAI Plus via Codex, NVIDIA NIM, DeepSeek, Anthropic, Tavily, Firecrawl, dll).'),
     ),
     p('Dashboard memutuskan route hanya berdasarkan prefix ID model:'),
@@ -142,6 +142,7 @@ function architecture() {
       el('span', {}, code('local/whisper-*'), ' \u2192 local ML service (STT offline)'),
       el('span', {}, 'prefix lain \u2192 9Router'),
     ),
+    p(b('Ctrl-C'), ' di jendela ', code('./run.sh'), ' mematikan kedua layanan lewat EXIT trap.'),
   );
 }
 
@@ -193,8 +194,7 @@ function ttsHelp() {
       'Slider juga di-forward ke upstream TTS \u2014 provider yang mendukung (OpenAI, Edge) akan menghormatinya, lainnya mengabaikan.'),
     p('Contoh phrase tersedia via tombol ', code('sample \u00b7 id'), ' dan ', code('sample \u00b7 en'), ' di bawah textarea.'),
     callout('', 'Ingin suara Coqui tidak muncul?',
-      'Pastikan service ', code('idn-tts'), ' berjalan (', code('cd idn-tts && ./run.sh'),
-      '), lalu tekan ', code('\u21bb refresh voices'), ' di panel ini.'),
+      'Normalnya ', code('./run.sh'), ' sudah menyalakan service ini otomatis. Kalau belum, cek log ', code('/tmp/wy-nine-idn-tts.log'), ' dan jalankan ulang ', code('./run.sh'), '. Setelah itu tekan ', code('\u21bb refresh voices'), ' di panel ini.'),
   );
 }
 
@@ -326,9 +326,9 @@ function shortcutsHelp() {
 function faqHelp() {
   return section('faq', 'FAQ & troubleshooting',
     el('h4', { style: { marginTop: '8px' } }, 'Kenapa Coqui voices tidak muncul?'),
-    p('Service ', code('idn-tts'), ' belum jalan. Cek: (1) ',
+    p('Service ', code('idn-tts'), ' belum siap. Normalnya ', code('./run.sh'), ' sudah menyalakannya otomatis. Cek: (1) ',
       code('curl http://127.0.0.1:21128/health'), ' balas JSON. (2) ',
-      code('IDN_TTS_ENABLED=true'), ' di ', code('.env'), '. (3) Tekan ',
+      code('IDN_TTS_ENABLED=true'), ' di ', code('.env'), '. (3) Kalau crash, lihat log ', code('/tmp/wy-nine-idn-tts.log'), '. (4) Tekan ',
       code('\u21bb refresh voices'), ' di panel Speak.'),
 
     el('h4', { style: { marginTop: '16px' } }, 'Request pertama Whisper sangat lambat'),

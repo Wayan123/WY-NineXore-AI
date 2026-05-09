@@ -14,53 +14,47 @@ Built in Python (FastAPI) + vanilla ES-module JS. No build tool.
 
 ## Architecture at a glance
 
+Two local processes + your external 9Router instance. Both local processes
+run in the **same** conda env (`torch-gpu`) and are spawned by the **same**
+`./run.sh`:
+
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Browser (http://127.0.0.1:8765)               │
-│                    Nine · Workbench UI                           │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-           ┌───────────────────┴──────────────────┐
-           ▼                                       ▼
-┌──────────────────────┐              ┌────────────────────────┐
-│  Dashboard backend   │              │  Local ML service      │
-│  (FastAPI)           │              │  (FastAPI + CUDA)      │
-│  :8765               │              │  :21128                │
-│                      │              │                        │
-│  conda: info-ai      │              │  conda: torch-gpu      │
-└────────────┬─────────┘              └───────────┬────────────┘
-             │                                    │
-             │                             ┌──────┴──────┐
-             │                             ▼             ▼
-             │                        Coqui VITS    Whisper
-             │                        (Indonesian   large-v3
-             │                         TTS,         (STT,
-             │                         83 voices)    HF cache)
-             ▼
-┌──────────────────────────────────────┐
-│     9Router gateway (:20128)         │
-│     OpenAI-compatible REST           │
-└──────┬──────────┬────────────┬───────┘
-       │          │            │
-       ▼          ▼            ▼
-   ┌──────┐  ┌────────┐  ┌───────────┐
-   │ cx/* │  │nvidia/*│  │ds/*, kr/* │
-   │ Codex│  │  NIM   │  │ DeepSeek, │
-   │(OpenAI│  │embed/  │  │ Claude    │
-   │ Plus) │  │ TTS    │  │  proxies  │
-   └──────┘  └────────┘  └───────────┘
+                         Browser (http://127.0.0.1:8765)
+                                    │
+                ┌───────────────────┴───────────────────┐
+                ▼                                       ▼
+    ┌──────────────────────┐              ┌────────────────────────┐
+    │  Dashboard backend   │ ◄── HTTP ──► │  Local ML service      │
+    │  FastAPI · :8765     │              │  FastAPI + CUDA        │
+    │                      │              │  :21128                │
+    │                      │              │   - Coqui VITS (TTS)   │
+    │                      │              │   - Whisper large-v3   │
+    └──────────┬───────────┘              └────────────────────────┘
+               │
+               ▼                 single `torch-gpu` conda env,
+    ┌──────────────────────┐    single ./run.sh starts both.
+    │  9Router gateway     │
+    │  :20128              │
+    │  (external)          │
+    └─────┬────────────────┘
+          │
+     ┌────┴────┬────────┬──────────┐
+     ▼         ▼        ▼          ▼
+   cx/*    nvidia/*   ds/*       kr/*
+   Codex   NIM       DeepSeek    Claude-proxy
+   (OpenAI  embed/     (chat)    (chat)
+   Plus)    TTS
 ```
 
-This project ships **two services** and **one HTML/JS frontend**:
+| Component | Port | Role |
+|---|---|---|
+| Dashboard backend | `8765` | proxies 9Router + persists history + serves UI |
+| Local ML service  | `21128` | Coqui Indonesian TTS + local Whisper STT (lazy) |
+| 9Router | `20128` | external OpenAI-compatible gateway (you run it) |
 
-| Component | Port | Runtime | Role |
-|---|---|---|---|
-| Dashboard backend | `8765` | conda `info-ai` (Python 3.10) | proxies to 9Router + persists history + serves UI |
-| Local ML service | `21128` | conda `torch-gpu` (Python 3.10 + CUDA) | Coqui Indonesian TTS + local Whisper STT |
-| 9Router | `20128` | external (you run it separately) | OpenAI-compatible gateway to every provider |
-| Browser UI | — | static ES modules | the console |
-
-The dashboard does not embed any provider keys of its own. Every external call goes through 9Router, which holds the provider credentials. Local models run entirely on your machine.
+Both local processes live inside the **`torch-gpu`** conda env. The
+dashboard does not embed any provider keys of its own — every external
+call goes through 9Router. Local ML models run entirely on your machine.
 
 ---
 
@@ -110,7 +104,7 @@ Prerequisites:
 - Linux or macOS with a recent Python (3.10+)
 - [Miniconda / Anaconda](https://docs.conda.io/en/latest/miniconda.html)
 - A running [9Router](https://github.com/decolua/9router) instance on `http://localhost:20128`
-- Optional (for local Indonesian TTS + Whisper STT): NVIDIA GPU with CUDA 12.x
+- NVIDIA GPU with CUDA 12.x (for Bahasa TTS + Whisper; CPU works too, just slower)
 
 ### 1. Clone
 
@@ -119,53 +113,55 @@ git clone https://github.com/Wayan123/WY-NineXore-AI.git
 cd WY-NineXore-AI
 ```
 
-### 2. Dashboard backend — `info-ai` conda env
+### 2. Single conda env (`torch-gpu`)
+
+One env hosts both the dashboard and the local ML service:
 
 ```bash
-# create the env (first time only)
-conda create -n info-ai python=3.10 -y
-conda activate info-ai
+# create if you don't have one; PyTorch match your CUDA build
+conda create -n torch-gpu python=3.10 -y
+conda activate torch-gpu
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128  # adjust cuXXX
 pip install -r requirements.txt
 ```
 
-Configure:
+Using a different env name? `CONDA_ENV=my-env ./run.sh`.
+
+### 3. Configure
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Only three lines usually need changing:
+Three lines usually need attention:
 
 ```dotenv
 NINEROUTER_URL=http://localhost:20128           # where your 9Router listens
 NINEROUTER_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxx  # paste from 9Router → Dashboard → Keys
-IDN_TTS_ENABLED=true                            # set to false if you skip the local service
+IDN_TTS_ENABLED=true                            # set to false to skip local ML entirely
 ```
 
-Run:
+Everything else has sensible defaults (see [`.env.example`](./.env.example)).
+
+### 4. Run — one command
 
 ```bash
 ./run.sh
-# → http://127.0.0.1:8765
 ```
 
-### 3. Local ML service — `torch-gpu` conda env (optional but recommended)
+That single script:
+- activates `torch-gpu` (or your `CONDA_ENV` override)
+- installs missing Python deps on first run
+- downloads ~330 MB of Coqui Indonesian TTS weights on first run (idempotent)
+- starts the local ML service on `:21128` (waits for `/health` up to 30 s)
+- starts the dashboard on `:8765`
+- **Ctrl-C stops everything cleanly** — both uvicorn processes go down via an EXIT trap
 
-The dashboard works without this service, but Bahasa TTS and offline Whisper STT need it.
+Open http://127.0.0.1:8765. The sidebar footer should show `upstream ready` and `idn-tts · 83 voices` once the local service finishes loading.
 
-```bash
-# expects an existing torch-gpu env with PyTorch + CUDA already installed.
-# see docs/SETUP.md for creating one from scratch.
-conda activate torch-gpu
-cd idn-tts
-./run.sh
-# first run downloads ~330 MB of Coqui VITS weights into idn-tts/models/
-# Whisper large-v3 is loaded from ~/.cache/huggingface on first request
-# → http://127.0.0.1:21128
-```
-
-Once both services are up, reload the dashboard and you'll see `idn-tts · 83 voices` in the sidebar footer.
+> Want to run only the ML service (e.g. on a separate host)?
+> `cd idn-tts && ./run.sh`. The dashboard will reach it via `IDN_TTS_URL`.
 
 ---
 
@@ -328,7 +324,7 @@ See [`.env.example`](./.env.example) for the full commented list.
 ### Running tests
 
 ```bash
-conda activate info-ai
+conda activate torch-gpu
 pytest tests/ -v          # 26 tests, all use an in-memory fake of 9Router
 ```
 
@@ -336,7 +332,7 @@ pytest tests/ -v          # 26 tests, all use an in-memory fake of 9Router
 
 ```
 WY-NineXore-AI/
-├── backend/                       # FastAPI app (conda info-ai)
+├── backend/                       # FastAPI app (dashboard)
 │   ├── main.py
 │   ├── config.py                  # pydantic-settings, reads .env
 │   ├── client.py                  # async httpx wrapper around 9Router
@@ -354,7 +350,7 @@ WY-NineXore-AI/
 │       ├── ui.js                  # toasts, modal, DOM helpers
 │       ├── md.js                  # tiny markdown renderer
 │       └── components/            # home / chat / image / tts / stt / vision / …
-├── idn-tts/                       # Local CUDA service (conda torch-gpu)
+├── idn-tts/                       # Local CUDA service (spawned by root run.sh)
 │   ├── service.py                 # Coqui VITS + Whisper in one FastAPI app
 │   ├── run.sh
 │   ├── download.sh                # fetches Wikidepia/indonesian-tts v1.2
@@ -373,7 +369,7 @@ WY-NineXore-AI/
 ├── DESIGN.md                      # the dark-canvas design system
 ├── .env.example                   # starter config (no real keys)
 ├── .gitignore
-├── run.sh                         # starts the dashboard in info-ai env
+├── run.sh                         # starts both services in one conda env
 ├── requirements.txt
 ├── LICENSE
 └── README.md
@@ -388,7 +384,7 @@ No. Just the dashboard + a 9Router instance gets you chat, images, web search, U
 
 **I don't see `coqui/*` voices in the TTS panel.**
 The `idn-tts` service isn't reachable. Check:
-1. `./idn-tts/run.sh` is running and `curl http://127.0.0.1:21128/health` returns JSON.
+1. `curl http://127.0.0.1:21128/health` returns JSON (the root `./run.sh` should have started it; if not, check `/tmp/wy-nine-idn-tts.log`).
 2. `IDN_TTS_ENABLED=true` in `.env`.
 3. Press **↻ refresh voices** at the top of the TTS panel.
 

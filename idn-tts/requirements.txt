@@ -1,20 +1,4 @@
-# Indonesian TTS + Whisper STT service dependencies.
-# Intended for the `torch-gpu` conda env. Torch/torchaudio are expected to
-# be installed separately (matching your CUDA build).
-
-# --- TTS (Coqui VITS) ---
-coqui-tts>=0.27
-g2p-id==0.0.4
-
-# --- STT (Whisper) ---
-# Loaded lazily on first /whisper/transcribe request.
-transformers>=4.40
-accelerate>=0.30
-soundfile>=0.12
-librosa>=0.10
-
-# --- shared ---
-fastapi>=0.110
-uvicorn[standard]>=0.30
-python-multipart>=0.0.9
-numpy
+# All dependencies now live in the root requirements.txt so a single
+# conda env can run both the dashboard and this local ML service.
+# This file re-exports them for anyone pointing pip at idn-tts/ directly.
+-r ../requirements.txt

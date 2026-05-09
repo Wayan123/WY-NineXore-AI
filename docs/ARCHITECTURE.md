@@ -2,7 +2,7 @@
 
 ## Components and processes
 
-Three processes cooperate. Each runs in a different conda env.
+Two local processes plus your external 9Router. The two local processes share a single `torch-gpu` conda env and are spawned by a single `./run.sh` (dashboard in the foreground, local ML in a managed background subprocess).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -14,7 +14,7 @@ Three processes cooperate. Each runs in a different conda env.
                                      │ besides Google Fonts (Inter + JetBrains Mono)
 ┌────────────────────────────────────┴────────────────────────────────────┐
 │                   Dashboard backend   (FastAPI)                          │
-│                   conda env: info-ai  ·  Python 3.10                     │
+│                   conda env: torch-gpu (shared with local ML)                     │
 │                                                                          │
 │   /api/chat          → /v1/chat/completions    (stream + session store)  │
 │   /api/image         → /v1/images/generations  (saves to data/outputs/)  │
@@ -38,7 +38,7 @@ Three processes cooperate. Each runs in a different conda env.
 ┌────────┴──────────────────────────┐     ┌─────────────┴────────────────┐
 │  9Router gateway (external)       │     │  Local ML service             │
 │  :20128  ·  OpenAI-compatible     │     │  :21128  ·  idn-tts/service.py│
-│                                   │     │  conda env: torch-gpu · CUDA  │
+│                                   │     │  conda env: torch-gpu (shared with dashboard) │
 │  Providers (you configure):       │     │                               │
 │   - Codex (OpenAI Plus, cx/*)     │     │  Loaded at boot:              │
 │   - NVIDIA NIM (nvidia/*)         │     │   - Coqui VITS (TTS)          │
@@ -58,9 +58,11 @@ Three processes cooperate. Each runs in a different conda env.
 
 ### Why split?
 
-- **`info-ai` / dashboard** is a lean HTTP service. No ML dependencies, fast install, friendly to rebuild.
-- **`torch-gpu` / local ML service** carries the heavy stack: PyTorch 2.10 cu128, torchaudio, coqui-tts, transformers, librosa, soundfile. You only need it when you want Bahasa voices or offline Whisper.
+- **Dashboard backend** is a lean HTTP service — fastapi + httpx + sqlite. Imports nothing from the ML stack.
+- **Local ML service** carries the heavy stack: PyTorch + torchaudio, coqui-tts, transformers, librosa, soundfile. Boots the VITS model at startup; Whisper lazy-loads on first request.
+- **Both local services share the same conda env** (`torch-gpu`). The dashboard doesn’t *import* any ML packages — it only talks HTTP to the local service — so the shared env is just a packaging convenience, not a coupling.
 - **9Router** is a separate project; we treat it as an external dependency. That keeps provider credentials in one place.
+- **One `./run.sh`** spawns both processes and traps Ctrl-C to tear them down together.
 
 If all three are on the same machine everything is `127.0.0.1:*` and latency is a few ms each hop. Running any of them on another host is just a URL change in `.env`.
 

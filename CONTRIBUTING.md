@@ -5,7 +5,7 @@ This is a small personal-scale project. Contributions are welcome but the bar is
 ## Before you start
 
 1. Read [`DESIGN.md`](./DESIGN.md) and [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md). The visual and structural choices are intentional — they explain why the code looks the way it does.
-2. Run the tests: `conda activate info-ai && pytest tests/`. 26/26 must pass before you open a PR.
+2. Run the tests: `conda activate torch-gpu && pytest tests/`. 26/26 must pass before you open a PR.
 3. Open an issue first for anything bigger than a bug fix. Saves both sides time.
 
 ## Code style

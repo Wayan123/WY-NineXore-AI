@@ -43,7 +43,7 @@ async def transcribe(
         if not await idn.whisper_is_reachable():
             raise HTTPException(
                 503,
-                f"Local Whisper unreachable at {idn.base}. Start the service with ./idn-tts/run.sh.",
+                f"Local Whisper unreachable at {idn.base}. Check /tmp/wy-nine-idn-tts.log and restart ./run.sh.",
             )
         try:
             result = await idn.whisper_transcribe(

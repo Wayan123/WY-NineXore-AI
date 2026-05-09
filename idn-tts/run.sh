@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# run.sh - start the Indonesian TTS FastAPI service inside `torch-gpu`.
+# idn-tts/run.sh — start ONLY the local ML service (Coqui VITS + Whisper).
+#
+# You normally don't need this: the root `./run.sh` already spawns the
+# local ML service alongside the dashboard. Use this script when you want
+# to restart / debug the ML service in isolation, or to run it on a
+# different host than the dashboard.
 
 set -euo pipefail
 
@@ -33,10 +38,10 @@ if [[ ! -s "models/checkpoint_1260000-inference.pth" ]]; then
   bash download.sh
 fi
 
-# --- 3. Deps ------------------------------------------------------------------
-if ! python -c "import TTS, g2p_id, fastapi, uvicorn, transformers, soundfile, librosa" 2>/dev/null; then
+# --- 3. Deps (should already be satisfied by root requirements.txt) ----------
+if ! python -c "import TTS, g2p_id, transformers, fastapi, uvicorn" 2>/dev/null; then
   echo "installing service deps..."
-  pip install -q -r requirements.txt
+  pip install -q -r ../requirements.txt
 fi
 
 # --- 4. Run -------------------------------------------------------------------
@@ -44,11 +49,10 @@ HOST="${IDN_TTS_HOST:-127.0.0.1}"
 PORT="${IDN_TTS_PORT:-21128}"
 
 echo ""
-echo "  local-ml service listening on http://$HOST:$PORT"
+echo "  idn-tts service listening on http://$HOST:$PORT"
 echo "  TTS  endpoints: /synthesize  /v1/audio/speech"
 echo "  STT  endpoints: /whisper/transcribe  /v1/audio/transcriptions"
 echo "  info: /health  /speakers"
 echo ""
 
-# disable --reload; model reload is slow (seconds) and reload breaks state.
-exec uvicorn service:app --host "$HOST" --port "$PORT"
+exec python -m uvicorn service:app --host "$HOST" --port "$PORT"

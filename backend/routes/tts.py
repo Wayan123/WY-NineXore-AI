@@ -87,7 +87,7 @@ async def speak(
         if not await idn.is_reachable():
             raise HTTPException(
                 503,
-                f"Indonesian TTS service unreachable at {idn.base}. Start it with ./idn-tts/run.sh.",
+                f"Indonesian TTS service unreachable at {idn.base}. Check /tmp/wy-nine-idn-tts.log and restart ./run.sh.",
             )
 
         try:

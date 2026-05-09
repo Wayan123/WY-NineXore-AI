@@ -4,19 +4,20 @@ A step-by-step walkthrough covering everything: conda, 9Router, provider keys, t
 
 Target: Linux or macOS with a modern shell. WSL works fine.
 
+> **TL;DR** — one conda env (`torch-gpu`), one `./run.sh`. The script spawns
+> both the dashboard and the local ML service and cleans up on Ctrl-C.
+
 ---
 
 ## 0. Prerequisites
 
 | Need | Why | Install |
 |---|---|---|
-| **Miniconda** or Anaconda | manages Python envs | [docs.conda.io/miniconda](https://docs.conda.io/en/latest/miniconda.html) |
+| **Miniconda** or Anaconda | manages the single Python env | [docs.conda.io/miniconda](https://docs.conda.io/en/latest/miniconda.html) |
 | **git** | clone this repo | your package manager |
-| **curl** + **ffmpeg** | audio decoding in the local ML service (librosa fallback) | `sudo apt install curl ffmpeg` |
-| **NVIDIA GPU + CUDA 12.x driver** | (optional) Coqui TTS + Whisper run far faster on GPU | `nvidia-smi` should show something |
-| **A running 9Router** | the gateway this app talks to | see [9Router quick start](https://github.com/decolua/9router#readme) |
-
-The dashboard itself is tiny. The weight is in PyTorch + CUDA, which you likely already have.
+| **curl** + **ffmpeg** | audio decoding for local Whisper (librosa fallback) | `sudo apt install curl ffmpeg` |
+| **NVIDIA GPU + CUDA 12.x driver** | Coqui TTS + Whisper run far faster on GPU (CPU works, much slower) | `nvidia-smi` should list a GPU |
+| **A running 9Router** | gateway for all external providers | see [9Router quick start](https://github.com/decolua/9router#readme) |
 
 ---
 
@@ -33,18 +34,18 @@ The dashboard itself is tiny. The weight is in PyTorch + CUDA, which you likely 
 
 ### Providers to configure in 9Router
 
-Everything the dashboard consumes is a 9Router provider. You don't need all of them; start with the ones you'll use.
+Everything the dashboard consumes is a 9Router provider. You don’t need all of them; start with the ones you’ll use.
 
 | Provider | Use | Credentials needed |
 |---|---|---|
-| **Codex (OpenAI Plus)** | chat, code, image, vision — `cx/*` models | login with your ChatGPT Plus / Pro account via 9Router's Codex wizard |
+| **Codex (OpenAI Plus)** | chat, code, image, vision — `cx/*` models | login with your ChatGPT Plus / Pro account via 9Router’s Codex wizard |
 | **NVIDIA NIM** | embeddings (`nvidia/nv-embedqa-e5-v5`), TTS | API key from [build.nvidia.com](https://build.nvidia.com/) |
 | **DeepSeek** | general chat (`ds/*`) | API key from [deepseek.com](https://platform.deepseek.com/) |
 | **Kolosal / Claude / K2 proxies** | `kr/*` models including Claude | provider-specific |
 | **Tavily / Exa / Brave** | web search | each has a free tier + API key |
 | **Firecrawl / Jina Reader** | URL → markdown | free tiers available |
 
-Each provider has its own setup flow inside 9Router. Once added, its models appear under `/v1/models/*` and the dashboard picks them up automatically.
+Once added, the models appear under `/v1/models/*` and the dashboard picks them up automatically.
 
 ---
 
@@ -63,159 +64,122 @@ backend/   frontend/   idn-tts/   docs/   tests/
 
 ---
 
-## 3. Dashboard backend (`info-ai` env)
+## 3. One conda env (`torch-gpu`)
 
-### Create the env
+A single env hosts both the dashboard and the local ML service. If you already have a `torch-gpu` env with PyTorch installed, skip the first two commands.
 
 ```bash
-conda create -n info-ai python=3.10 -y
-conda activate info-ai
+# create the env (one-time, first install only)
+conda create -n torch-gpu python=3.10 -y
+conda activate torch-gpu
+
+# install PyTorch + torchaudio matching your CUDA build
+# check https://pytorch.org/get-started/locally/ for the right index URL
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+# install the rest (covers both services)
 pip install -r requirements.txt
 ```
 
-This installs FastAPI, uvicorn, httpx, pydantic, pydantic-settings, and pytest.
+What that pulls in:
+- **Dashboard**: fastapi, uvicorn, httpx, pydantic-settings
+- **Local ML**: coqui-tts, g2p-id, transformers, accelerate, soundfile, librosa
+- **Dev**: pytest, pytest-asyncio
 
-### Configure
+Using a different env name (e.g. you already have one called `ml`)? Set `CONDA_ENV` when starting:
+
+```bash
+CONDA_ENV=ml ./run.sh
+```
+
+### Verify the env
+
+```bash
+python - <<'PY'
+import torch, fastapi, TTS
+print("torch:", torch.__version__, "cuda:", torch.cuda.is_available())
+print("fastapi:", fastapi.__version__)
+print("coqui-tts:", TTS.__version__)
+PY
+```
+
+You should see CUDA `True`. If `False`, torch is CPU-only — the service still works, just slower.
+
+---
+
+## 4. Configure (`.env`)
 
 ```bash
 cp .env.example .env
 $EDITOR .env
 ```
 
-The only two lines that almost always need changing are:
+The only two lines that almost always need changing:
 
 ```dotenv
 NINEROUTER_URL=http://localhost:20128       # where 9Router listens
 NINEROUTER_KEY=sk-xxxxxxxxxxxxxxxxxxxxxx    # from 9Router → Dashboard → Keys
 ```
 
-Everything else has working defaults. See the full list in [`.env.example`](../.env.example).
+Set `IDN_TTS_ENABLED=false` if you want to skip the local ML service entirely (dashboard will only use upstream TTS/STT).
 
-### Run
+Everything else has working defaults — see [`.env.example`](../.env.example) for the full list.
+
+---
+
+## 5. Run — one command
 
 ```bash
 ./run.sh
 ```
 
+The script:
+1. activates `torch-gpu` (or your `CONDA_ENV` override)
+2. loads `.env`
+3. installs missing Python deps on first run
+4. probes your 9Router (warns if offline, still starts the dashboard)
+5. downloads ~330 MB of Coqui Indonesian TTS weights on first run (idempotent)
+6. starts the **local ML service** in the background on `:21128` and waits up to 30 s for `/health`
+7. starts the **dashboard** on `:8765` in the foreground
+8. **Ctrl-C** cleans up both processes via an EXIT trap
+
 You should see:
 
 ```
-✓ conda env: info-ai (Python 3.10.x)
-  ╭──────────────────────────────────────────────╮
-  │  9Router Dashboard                           │
-  │  http://127.0.0.1:8765                       │
-  │  upstream: http://localhost:20128            │
-  ╰──────────────────────────────────────────────╯
-INFO:     Uvicorn running on http://127.0.0.1:8765
+✓ conda env: torch-gpu (Python 3.10.x)
+→ starting local ML service (idn-tts) on 127.0.0.1:21128…
+   waiting for idn-tts to come up… … ready (16s).
+
+  ╭───────────────────────────────────────────────────────╮
+  │  WY NineXore AI                                       │
+  │  dashboard:  http://127.0.0.1:8765                    │
+  │  local ML:   http://127.0.0.1:21128 (idn-tts)         │
+  │  upstream:   http://localhost:20128                   │
+  │                                                       │
+  │  Ctrl-C stops everything.                             │
+  ╰───────────────────────────────────────────────────────╯
+
+INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
 ```
 
-Open `http://127.0.0.1:8765` in a browser. The sidebar footer should say **upstream ready**.
+Open http://127.0.0.1:8765. The sidebar footer should say `upstream ready` and, after ~10-15 s, `idn-tts · 83 voices`.
 
-### Pick your defaults (optional)
+### Running only the local ML service
 
-Browse **Models** in the UI and see what your 9Router instance has. Copy the IDs you use most into `.env`:
-
-```dotenv
-DEFAULT_CHAT_MODEL=ds/deepseek-chat
-DEFAULT_EMBEDDING_MODEL=nvidia/nv-embedqa-e5-v5
-```
-
-Restart `./run.sh` to pick up changes.
-
----
-
-## 4. Local ML service (`torch-gpu` env) — optional
-
-Skip this section if you don't need Bahasa Indonesia TTS or offline Whisper. The dashboard works without it; you'll just miss the `coqui/*` voices and `local/whisper-large-v3`.
-
-### Create the env (if you don't have one)
-
-Requires a working NVIDIA driver with CUDA 12.x. Verify with `nvidia-smi`.
-
-```bash
-conda create -n torch-gpu python=3.10 -y
-conda activate torch-gpu
-
-# PyTorch matching your CUDA. Check https://pytorch.org/get-started/locally/ for the right index URL.
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
-```
-
-Then install the service deps:
+You may want to run just the local ML service on a different host (e.g. a box with a big GPU, with the dashboard on a laptop):
 
 ```bash
 cd idn-tts
-pip install -r requirements.txt
+./run.sh      # listens on 127.0.0.1:21128 by default
+# or bind it so remote dashboards can reach it:
+IDN_TTS_HOST=0.0.0.0 ./run.sh
 ```
 
-Packages that get pulled in:
-- `coqui-tts>=0.27` — VITS inference
-- `g2p-id==0.0.4` — Wikidepia's grapheme→phoneme (matches the model's training-time preprocessor)
-- `transformers>=4.40` — Whisper loader
-- `accelerate`, `soundfile`, `librosa` — Whisper audio pipeline
-
-### Fetch the Indonesian TTS weights
-
-```bash
-./download.sh
-```
-
-Downloads ~330 MB from [Wikidepia/indonesian-tts v1.2 release](https://github.com/Wikidepia/indonesian-tts/releases/tag/v1.2) into `idn-tts/models/`:
-
-- `checkpoint_1260000-inference.pth` (model weights)
-- `config.json` (model config)
-- `speakers.pth` (speaker embedding table, 83 voices)
-
-### Cache Whisper large-v3 (optional — will auto-download if missing)
-
-If the model isn't in your HuggingFace cache, it'll download ~2.9 GB on the first transcribe request. To prime it now:
-
-```bash
-python - <<'PY'
-from transformers import AutoProcessor, AutoModelForSpeechSeq2Seq
-mid = "openai/whisper-large-v3"
-AutoProcessor.from_pretrained(mid)
-AutoModelForSpeechSeq2Seq.from_pretrained(mid)
-print("whisper cached")
-PY
-```
-
-### Run
-
-```bash
-./run.sh
-# or: CONDA_ENV=my-torch-env ./run.sh
-```
-
-You should see:
-
-```
-conda env: torch-gpu (Python 3.10.x)
-
-  local-ml service listening on http://127.0.0.1:21128
-  TTS  endpoints: /synthesize  /v1/audio/speech
-  STT  endpoints: /whisper/transcribe  /v1/audio/transcriptions
-  info: /health  /speakers
-
-INFO:     ready in 1.6s · device=cuda:NVIDIA GeForce RTX 4060 … · sr=22050 · 83 speaker(s)
-```
-
-Verify:
-
-```bash
-curl http://127.0.0.1:21128/health | jq .
-```
-
-Should show `loaded: true`, the CUDA device name, `n_speakers: 83`, and a `whisper` block with `enabled: true`.
-
-### Reload the dashboard
-
-Refresh `http://127.0.0.1:8765` — the sidebar footer should now say `idn-tts · 83 voices`.
-The **Speak** panel will show a grouped dropdown with `coqui/wibowo` (default), `coqui/ardi`, `coqui/gadis`, then upstream voices, then 80 regional Coqui voices.
-The **Transcribe** panel will show `local/whisper-large-v3` at the top with a "loads on first use" hint.
+Then point the dashboard at it via `IDN_TTS_URL=http://remote-host:21128` in `.env`.
 
 ---
 
-## 5. First-run verification checklist
+## 6. First-run verification checklist
 
 Everything below should succeed after a fresh install.
 
@@ -225,10 +189,10 @@ curl -sf http://127.0.0.1:8765/api/health
 # → {"ok":true,"service":"9router-dashboard"}
 
 # 2. upstream reachable
-curl -s http://127.0.0.1:8765/api/upstream | jq .
-# → {"reachable":true,"upstream":{"ok":true}}
+curl -s http://127.0.0.1:8765/api/upstream | jq .reachable
+# → true
 
-# 3. idn-tts status (only if you started it)
+# 3. idn-tts status (only if IDN_TTS_ENABLED=true)
 curl -s http://127.0.0.1:8765/api/idn-tts/status | jq '.reachable, .n_speakers, .whisper.enabled'
 # → true / 83 / true
 
@@ -236,60 +200,42 @@ curl -s http://127.0.0.1:8765/api/idn-tts/status | jq '.reachable, .n_speakers, 
 curl -s 'http://127.0.0.1:8765/api/models?kind=tts' | jq '.data | length'
 
 # 5. smoke test Coqui TTS
-curl -X POST http://127.0.0.1:8765/api/tts/speak \
-  -H 'Content-Type: application/json' \
+curl -X POST http://127.0.0.1:8765/api/tts/speak \\
+  -H 'Content-Type: application/json' \\
   -d '{"model":"coqui/wibowo","input":"Halo, ini tes.","speed":1.2}' | jq '.url'
 
-# 6. smoke test local Whisper (feed the file we just created)
-#    replace FILE with the path from step 5's .url
-FILE=data/outputs/$(curl -s -X POST http://127.0.0.1:8765/api/tts/speak \
-  -H 'Content-Type: application/json' \
+# 6. smoke test local Whisper (feed the TTS we just generated)
+FILE=data/outputs/$(curl -s -X POST http://127.0.0.1:8765/api/tts/speak \\
+  -H 'Content-Type: application/json' \\
   -d '{"model":"coqui/wibowo","input":"halo dunia"}' | jq -r '.file' | cut -d/ -f2)
-curl -s -X POST http://127.0.0.1:8765/api/stt/transcribe \
-  -F "file=@$FILE" -F 'model=local/whisper-large-v3' -F 'language=id' \
+curl -s -X POST http://127.0.0.1:8765/api/stt/transcribe \\
+  -F "file=@$FILE" -F 'model=local/whisper-large-v3' -F 'language=id' \\
   | jq '.result.text'
-# → "halo dunia"
 
 # 7. pytest (offline, uses fake upstream)
-conda activate info-ai
 pytest tests/ -q
 # → 26 passed
 ```
 
 ---
 
-## 6. Running everything with systemd (optional)
+## 7. Running everything with systemd (optional)
 
-For machines where you want the services up at login, two simple systemd user units are enough.
+For machines where you want the services up at login, one systemd user unit is enough — `run.sh` already handles both processes.
 
 `~/.config/systemd/user/wy-nine.service`:
 
 ```ini
 [Unit]
-Description=WY NineXore AI — dashboard
+Description=WY NineXore AI
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=%h/AI/WY-NineXore-AI
-ExecStart=/bin/bash -lc 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate info-ai && exec python -m uvicorn backend.main:app --host 127.0.0.1 --port 8765'
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
-
-`~/.config/systemd/user/wy-nine-idn-tts.service`:
-
-```ini
-[Unit]
-Description=WY NineXore AI — local ML (Coqui + Whisper)
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=%h/AI/WY-NineXore-AI/idn-tts
-ExecStart=/bin/bash -lc 'source ~/miniconda3/etc/profile.d/conda.sh && conda activate torch-gpu && exec python -m uvicorn service:app --host 127.0.0.1 --port 21128'
+ExecStart=/bin/bash -lc './run.sh'
+KillMode=mixed
+KillSignal=SIGINT
 Restart=on-failure
 
 [Install]
@@ -301,71 +247,70 @@ Enable:
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now wy-nine.service
-systemctl --user enable --now wy-nine-idn-tts.service
 systemctl --user status wy-nine
 ```
 
-`loginctl enable-linger $USER` keeps the units alive after you log out.
+`loginctl enable-linger $USER` keeps the service alive after logout.
+
+`KillSignal=SIGINT` is important: it routes `systemctl stop` through the EXIT trap in `run.sh`, which tears down both uvicorn children cleanly.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 **"upstream offline" in the sidebar**
-Your 9Router isn't reachable. `curl http://localhost:20128/api/health` should return `{"ok":true}`. If you changed the URL, update `NINEROUTER_URL` in `.env`.
+Your 9Router isn’t reachable. `curl http://localhost:20128/api/health` should return `{"ok":true}`. If you changed the URL, update `NINEROUTER_URL` in `.env`.
 
 **401 on every request**
 9Router has `requireApiKey=true`. Copy a key from `Dashboard → Keys` into `NINEROUTER_KEY=` in `.env` and restart `./run.sh`.
 
 **TTS panel shows no `coqui/*` voices**
-The local ML service isn't reachable. Check:
-1. `curl http://127.0.0.1:21128/health` works
-2. `IDN_TTS_ENABLED=true` in `.env`
-3. Click **↻ refresh voices** at the top of the Speak panel.
+The local ML service didn’t come up. Look at `/tmp/wy-nine-idn-tts.log` for the reason. Common causes:
+1. GPU OOM — disable Whisper with `WHISPER_ENABLED=false` so only Coqui runs.
+2. Model files missing — run `cd idn-tts && bash download.sh`.
+3. torchaudio / torch version mismatch — reinstall (see below).
 
 **First transcribe is slow**
 Whisper lazy-loads. Expect 10–15 s on a mid-range GPU. Later calls are <1 s.
 
 **`libtorchaudio.so: undefined symbol`**
-Your `torchaudio` version doesn't match `torch`. Fix:
+`torchaudio` doesn’t match `torch`. Fix:
 ```bash
-pip install --upgrade "torchaudio==$(python -c 'import torch; print(torch.__version__.split("+")[0])').*" \
+pip install --upgrade "torchaudio==$(python -c 'import torch; print(torch.__version__.split(\"+\")[0])').*" \\
   --index-url https://download.pytorch.org/whl/cu128
 ```
 (replace `cu128` with your CUDA build, e.g. `cu121`, `cu124`)
 
 **Image generation: "Codex did not return an image. Plus/Pro required"**
-9Router's Codex provider needs an active ChatGPT Plus or Pro login. Either log in again via 9Router's Codex wizard, or switch to a different image provider (Gemini, FLUX, Stability, Recraft) after adding that provider's key in 9Router.
+9Router’s Codex provider needs an active ChatGPT Plus/Pro login. Re-login via 9Router’s Codex wizard, or switch to Gemini/FLUX/Stability/Recraft after adding that provider’s key.
 
 **"file too large" on Vision upload**
-The cap is 12 MB on raw bytes (~16 MB after base64). Resize the image first. The cap exists so the final JSON body stays under typical upstream-provider request limits.
+Cap is 12 MB raw (~16 MB after base64). Resize the image first. The cap keeps the final JSON body under typical upstream-provider request limits.
 
 ---
 
-## 8. Upgrading
+## 9. Upgrading
 
 ```bash
 git pull --ff-only
-conda activate info-ai && pip install -r requirements.txt
-# if you use the local ML service:
-conda activate torch-gpu && pip install -r idn-tts/requirements.txt
+conda activate torch-gpu
+pip install -r requirements.txt
 ```
 
-Model weights don't move between minor versions; you don't need to re-run `./download.sh`.
+Model weights don’t move between minor versions; you don’t need to re-run `download.sh`.
 
 ---
 
-## 9. Uninstall / clean
+## 10. Uninstall / clean
 
 ```bash
-# stop processes
-systemctl --user disable --now wy-nine wy-nine-idn-tts   # if installed via systemd
+# stop
+systemctl --user disable --now wy-nine        # if installed via systemd
 pkill -f 'uvicorn backend.main:app' ; pkill -f 'uvicorn service:app'
 
 # remove repo + data
 rm -rf ~/AI/WY-NineXore-AI
 
-# (optional) drop conda envs
-conda env remove -n info-ai
+# (optional) drop the conda env
 conda env remove -n torch-gpu
 ```

@@ -67,7 +67,7 @@ async function render(root) {
     idn.reachable ? row('Speakers', String(idn.n_speakers || 0)) : null,
     idn.reachable ? row('Default voice', idn.default_speaker || '—') : null,
     el('p', { class: 'muted', style: { fontSize: '12px', marginTop: '8px' } },
-      'Start the service with ', el('code', {}, 'cd idn-tts && ./run.sh'), '.',
+      'Start with ', el('code', {}, './run.sh'), ' in the repo root (spawns this service alongside the dashboard).',
       ' Adds 83 Bahasa Indonesia voices (wibowo, ardi, gadis + 80 regional) to the Speak panel.',
     ),
     el('div', { class: 'btn-row mt-sm' },
