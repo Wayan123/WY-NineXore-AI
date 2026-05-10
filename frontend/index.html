@@ -10,6 +10,33 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
   <link rel="stylesheet" href="/assets/styles.css">
+  <script>
+    // Pre-paint theme init — avoids flash of wrong theme on first load.
+    // Mirrors the logic in /assets/theme.js. Keep in sync.
+    (function () {
+      try {
+        var KEY = 'wy-nine-theme';
+        var m = null;
+        try {
+          var qp = new URLSearchParams(location.search);
+          var q = qp.get('theme');
+          if (q === 'dark' || q === 'light' || q === 'system') {
+            m = q;
+            try { localStorage.setItem(KEY, m); } catch (e2) {}
+          }
+        } catch (e1) {}
+        if (!m) m = localStorage.getItem(KEY) || 'dark';
+        if (m !== 'dark' && m !== 'light' && m !== 'system') m = 'dark';
+        var resolved = (m === 'system')
+          ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+          : m;
+        document.documentElement.setAttribute('data-theme', resolved);
+        document.documentElement.style.colorScheme = resolved;
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
 </head>
 <body>
 
@@ -118,6 +145,12 @@
       <span class="dot"></span>
       <span class="label">idn-tts —</span>
     </div>
+    <button id="themeToggle" class="theme-toggle" type="button"
+            aria-label="Cycle theme (dark / light / system)"
+            title="Cycle theme (dark / light / system)">
+      <span class="theme-toggle-icon" aria-hidden="true">☾</span>
+      <span class="theme-toggle-label">dark</span>
+    </button>
     <small class="upstream" id="upstreamUrl">—</small>
   </footer>
 </aside>

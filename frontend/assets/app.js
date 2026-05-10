@@ -1,6 +1,7 @@
 // Main bootstrap + hash router.
 import { bootstrap, getState, onChange, refreshUpstream } from './store.js';
 import { $, $$, toast } from './ui.js';
+import { initTheme, currentMode, setMode, onThemeChange, resolvedTheme, THEME_MODES } from './theme.js';
 
 const VIEWS = {
   home:     () => import('./components/home.js'),
@@ -88,6 +89,29 @@ function renderStatus() {
 
 onChange(renderStatus);
 
+// ---- theme toggle (sidebar footer) -----------------------------------------
+const THEME_ICON = { dark: '☾', light: '☀', system: '◐' };
+function renderThemeToggle() {
+  const btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  const mode = currentMode();
+  const resolved = resolvedTheme(mode);
+  const icon = btn.querySelector('.theme-toggle-icon');
+  const label = btn.querySelector('.theme-toggle-label');
+  if (icon) icon.textContent = THEME_ICON[mode];
+  if (label) label.textContent = mode === 'system' ? 'system (' + resolved + ')' : mode;
+  btn.title = 'theme: ' + mode + ' → ' + resolved + ' (click to cycle)';
+}
+const _themeBtn = document.getElementById('themeToggle');
+if (_themeBtn) {
+  _themeBtn.addEventListener('click', () => {
+    const order = THEME_MODES;  // ['dark','light','system']
+    const next = order[(order.indexOf(currentMode()) + 1) % order.length];
+    setMode(next);
+  });
+}
+onThemeChange(renderThemeToggle);
+
 // Recheck every 30s unobtrusively.
 setInterval(refreshUpstream, 30_000);
 
@@ -125,6 +149,8 @@ document.addEventListener('keydown', (e) => {
 
 // ---- go ---------------------------------------------------------------------
 (async () => {
+  initTheme();
+  renderThemeToggle();
   await bootstrap();
   renderStatus();
 

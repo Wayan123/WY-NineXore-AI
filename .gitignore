@@ -46,6 +46,11 @@ logs/
 tmp/
 .cache/
 
+# ----- Private, local-only — never upload ---------------------------------
+# Personal social-media assets (captions, composited images, reels, etc.).
+# Keep local; do not push.
+social-media/
+
 # ----- Node / frontend (we don't use one, but safeguard) --------------------
 node_modules/
 package-lock.json

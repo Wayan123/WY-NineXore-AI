@@ -2,6 +2,7 @@
 import { apiGet } from '../api.js';
 import { getState, refreshUpstream, refreshModels } from '../store.js';
 import { copyToClipboard, el, loading, toastError, toastGood } from '../ui.js';
+import { currentMode, setMode, resolvedTheme, THEME_MODES, onThemeChange } from '../theme.js';
 
 const SHORTCUTS = [
   ['g h',   'Home'],
@@ -99,6 +100,9 @@ async function render(root) {
     )),
   ));
 
+  // Appearance card (theme switcher)
+  root.append(renderThemeCard());
+
   // About card
   root.append(el('div', { class: 'card mt-md' },
     el('h3', {}, 'About'),
@@ -137,5 +141,64 @@ function row(k, v, copy = false) {
     el('span', { class: 'muted', style: { minWidth: '140px' } }, k),
     el('span', { class: 'mono', style: { textAlign: 'right', wordBreak: 'break-all', flex: 1 } }, v),
     copy ? el('button', { class: 'btn btn-ghost btn-small', onclick: () => copyToClipboard(v) }, '⧉') : null,
+  );
+}
+
+function renderThemeCard() {
+  const mode = currentMode();
+  const resolved = resolvedTheme(mode);
+
+  const MODE_META = {
+    dark:   { label: 'Dark',   hint: 'Canvas gelap (default).', icon: '\u263E' },
+    light:  { label: 'Light',  hint: 'Canvas terang untuk siang hari.', icon: '\u2600' },
+    system: { label: 'System', hint: 'Ikut preferensi OS (prefers-color-scheme).', icon: '\u25D0' },
+  };
+
+  const segHost = el('div', {
+    class: 'inline',
+    role: 'radiogroup',
+    'aria-label': 'Theme mode',
+    style: { gap: '6px', padding: '4px', background: 'var(--surface-2)',
+             border: '1px solid var(--hairline)', borderRadius: 'var(--r-md)',
+             width: 'fit-content' },
+  });
+
+  const buttons = {};
+  for (const m of THEME_MODES) {
+    const meta = MODE_META[m];
+    const btn = el('button', {
+      role: 'radio',
+      'aria-checked': m === mode ? 'true' : 'false',
+      class: 'btn btn-small' + (m === mode ? ' btn-primary' : ' btn-ghost'),
+      style: { minWidth: '82px' },
+      onclick: () => {
+        setMode(m);
+        // update aria + classes
+        for (const other of THEME_MODES) {
+          const b = buttons[other];
+          b.setAttribute('aria-checked', other === m ? 'true' : 'false');
+          b.className = 'btn btn-small' + (other === m ? ' btn-primary' : ' btn-ghost');
+        }
+        resolvedSpan.textContent = 'resolved: ' + resolvedTheme(m);
+        hintSpan.textContent = MODE_META[m].hint;
+      },
+    }, meta.icon + ' ' + meta.label);
+    buttons[m] = btn;
+    segHost.appendChild(btn);
+  }
+
+  const resolvedSpan = el('span', { class: 'muted mono', style: { fontSize: '12px' } },
+    'resolved: ' + resolved);
+  const hintSpan = el('span', { class: 'muted', style: { fontSize: '12px' } },
+    MODE_META[mode].hint);
+
+  return el('div', { class: 'card mt-md' },
+    el('h3', {}, 'Appearance'),
+    el('p', { class: 'muted', style: { fontSize: '0.88rem', margin: '0 0 12px' } },
+      'Pilih tema. Setting ini disimpan di browser (localStorage), tidak dikirim ke server.'),
+    segHost,
+    el('div', { class: 'inline mt-sm', style: { gap: '14px', flexWrap: 'wrap' } },
+      resolvedSpan, hintSpan,
+    ),
   );
 }
