@@ -33,24 +33,14 @@ Every panel renders on a dark canvas with a single lavender accent. Click any th
 
 ### Audio samples
 
-Click ▶ to play in the browser. Each clip is Coqui VITS at speed `1.20×` (the dashboard default), rendered with a lavender waveform that matches the UI.
+Real Coqui VITS output at speed `1.20×` (the dashboard default). Click a link to open the audio in a browser tab — the browser's built-in player streams the MP3 directly from GitHub.
 
-<table>
-  <tr>
-    <td align="center" width="33%"><b>Wibowo</b><br>audiobook, default</td>
-    <td align="center" width="33%"><b>Ardi</b><br>Azure-trained</td>
-    <td align="center" width="33%"><b>Gadis</b><br>Azure-trained, female</td>
-  </tr>
-  <tr>
-    <td><video src="docs/samples/tts-wibowo.mp4" controls width="100%"></video></td>
-    <td><video src="docs/samples/tts-ardi.mp4"   controls width="100%"></video></td>
-    <td><video src="docs/samples/tts-gadis.mp4"  controls width="100%"></video></td>
-  </tr>
-</table>
+- ▶ [`tts-wibowo.mp3`](docs/samples/tts-wibowo.mp3) — **Wibowo**, audiobook (default)
+- ▶ [`tts-ardi.mp3`](docs/samples/tts-ardi.mp3)   — **Ardi**, Azure-trained
+- ▶ [`tts-gadis.mp3`](docs/samples/tts-gadis.mp3)  — **Gadis**, Azure-trained, female
+- ▶ [`tts-user-demo.mp3`](docs/samples/tts-user-demo.mp3) — a longer free-form demo
 
-A longer free-form demo:
-
-<video src="docs/samples/tts-user-demo.mp4" controls width="100%"></video>
+All clips were generated locally by the `idn-tts` service — **no audio left the machine to create them.**
 
 ### Vision / OCR sample
 

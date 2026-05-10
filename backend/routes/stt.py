@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from ..client import NineRouterClient
-from ..idn_tts import IdnTTSClient, IdnTTSError, is_local_whisper_model
+from ..idn_tts import IdnTTSClient, IdnTTSError, is_local_whisper_model, whisper_variant_from_model
 from ..storage.db import HistoryStore
 from .deps import get_client, get_idn_tts, get_store
 
@@ -52,6 +52,7 @@ async def transcribe(
                 language=language,
                 task="transcribe",
                 return_segments=(response_format == "verbose_json"),
+                variant=whisper_variant_from_model(model),
             )
         except IdnTTSError:
             raise

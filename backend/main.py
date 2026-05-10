@@ -132,6 +132,27 @@ async def idn_tts_status(request: Request) -> dict:
     }
 
 
+@app.post("/api/idn-tts/whisper/load")
+async def idn_tts_whisper_load(
+    request: Request,
+    variant: str,
+) -> dict:
+    """Ask the local service to start loading a Whisper variant in the
+    background. Safe to call repeatedly; returns fast.
+    """
+    idn = request.app.state.idn_tts
+    if not idn.enabled:
+        raise HTTPException(503, "local ML service disabled")
+    try:
+        return await idn.whisper_load(variant)
+    except Exception as e:
+        # Bubble up via the global NineRouterError-style handler.
+        from .idn_tts import IdnTTSError
+        if isinstance(e, IdnTTSError):
+            raise
+        raise HTTPException(502, f"whisper/load upstream error: {e}")
+
+
 # --------------------------------------------------------------------- routers
 app.include_router(models.router)
 app.include_router(chat.router)

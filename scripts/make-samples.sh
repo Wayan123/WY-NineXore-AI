@@ -35,21 +35,12 @@ for voice in wibowo ardi gadis; do
     -H 'Content-Type: application/json' \
     -d "{\"text\":$(printf '%s' "$text" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read()))'),\"speaker\":\"$voice\",\"speed\":1.2}" \
     -o "$OUT/tts-$voice.wav"
-  # Emit an mp4 with a lavender waveform visualisation. GitHub renders
-  # <video> tags inline in README, so one file gives click-to-play in the
-  # browser without forcing a download, and doubles as an audio artefact.
-  dur=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$OUT/tts-$voice.wav" | cut -d. -f1)
-  dur=$((dur + 1))
-  ffmpeg -loglevel error -y -i "$OUT/tts-$voice.wav" \
-    -filter_complex "color=c=0x0f1113:s=640x120:d=$dur[bg];[0:a]showwaves=s=640x120:mode=line:rate=15:colors=0x8b90f0:draw=full[wave];[bg][wave]overlay=shortest=1,format=yuv420p[v]" \
-    -map "[v]" -map 0:a \
-    -c:v libx264 -preset veryfast -crf 32 \
-    -c:a aac -b:a 96k \
-    -movflags +faststart \
-    -shortest \
-    "$OUT/tts-$voice.mp4"
+  # Compress to MP3 so the repo only carries ~100 KB per sample. GitHub
+  # doesn't embed <audio>; it opens MP3 links in a new tab with the
+  # browser's native player, which plays fine.
+  ffmpeg -loglevel error -y -i "$OUT/tts-$voice.wav" -codec:a libmp3lame -b:a 96k "$OUT/tts-$voice.mp3"
   rm -f "$OUT/tts-$voice.wav"
-  echo "  ✓ $OUT/tts-$voice.mp4  ($(stat -c %s "$OUT/tts-$voice.mp4") bytes)"
+  echo "  ✓ $OUT/tts-$voice.mp3  ($(stat -c %s "$OUT/tts-$voice.mp3") bytes)"
 done
 
 # Also copy the Vision OCR sample image that gets used in the screenshots.

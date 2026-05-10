@@ -111,6 +111,29 @@ class IdnTTSClient:
         return r.content, r.headers.get("content-type", "audio/wav")
 
     # --------------------------------------------------------- whisper STT
+    async def whisper_variants(self) -> dict:
+        """Per-variant catalogue with loaded/loading/error flags."""
+        try:
+            r = await self._client.get("/whisper/variants", timeout=3.0)
+            if r.status_code >= 400:
+                return {}
+            return r.json()
+        except Exception:
+            return {}
+
+    async def whisper_load(self, variant: str) -> dict:
+        """Kick off a background load of a variant. Returns immediately."""
+        r = await self._client.post(
+            "/whisper/load",
+            data={"variant": variant},
+            timeout=5.0,
+        )
+        if r.status_code >= 400:
+            try: body = r.json()
+            except Exception: body = r.text
+            raise IdnTTSError(r.status_code, body)
+        return r.json()
+
     async def whisper_transcribe(
         self,
         audio_bytes: bytes,
@@ -119,6 +142,7 @@ class IdnTTSClient:
         language: Optional[str] = None,
         task: str = "transcribe",
         return_segments: bool = False,
+        variant: Optional[str] = None,
     ) -> dict:
         files = {"file": (filename, audio_bytes)}
         data: dict = {}
@@ -128,6 +152,8 @@ class IdnTTSClient:
             data["task"] = task
         if return_segments:
             data["return_segments"] = "true"
+        if variant:
+            data["variant"] = variant
         r = await self._client.post("/whisper/transcribe", data=data, files=files, timeout=600.0)
         if r.status_code >= 400:
             try:
@@ -142,6 +168,9 @@ class IdnTTSClient:
 _COQUI_MODEL_PREFIX = "coqui/"
 _WHISPER_MODEL_PREFIX = "local/whisper"
 
+# Variants we surface to the UI. Must match WHISPER_VARIANTS in idn-tts/service.py
+_WHISPER_VARIANTS = ("tiny", "medium", "large-v3")
+
 
 def is_coqui_model(model: str) -> bool:
     return bool(model) and model.startswith(_COQUI_MODEL_PREFIX)
@@ -154,3 +183,15 @@ def coqui_speaker_from_model(model: str) -> str:
 def is_local_whisper_model(model: str) -> bool:
     """Any ``local/whisper*`` model routes to the idn-tts service's Whisper loader."""
     return bool(model) and model.startswith(_WHISPER_MODEL_PREFIX)
+
+
+def whisper_variant_from_model(model: str) -> Optional[str]:
+    """Extract the variant short-name from ``local/whisper-<variant>``.
+
+    Returns None when the suffix isn't a known variant — the service then
+    picks its default.
+    """
+    if not is_local_whisper_model(model):
+        return None
+    suffix = model[len(_WHISPER_MODEL_PREFIX):].lstrip("-")
+    return suffix if suffix in _WHISPER_VARIANTS else None

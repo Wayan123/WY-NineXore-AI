@@ -34,27 +34,34 @@ async def _coqui_tts_entries(idn: IdnTTSClient) -> list[dict]:
 
 
 async def _local_whisper_entries(idn: IdnTTSClient) -> list[dict]:
-    """Return the local Whisper model entry when the idn-tts service has it enabled."""
+    """Return one model entry per Whisper variant exposed by the local service."""
     try:
-        h = await idn.health()
+        catalog = await idn.whisper_variants()
     except Exception:
-        h = None
-    w = (h or {}).get("whisper") if isinstance(h, dict) else None
-    if not w or not w.get("enabled"):
+        catalog = {}
+    if not catalog or not catalog.get("enabled"):
         return []
-    model_id = w.get("model") or "openai/whisper-large-v3"
-    # expose under a stable "local/" prefix so routing picks it up
-    short = model_id.split("/")[-1]  # whisper-large-v3
-    return [{
-        "id": f"local/{short}",
-        "object": "model",
-        "owned_by": "local",
-        "kind": "stt",
-        "upstream_model": model_id,
-        "loaded": bool(w.get("loaded")),
-        "loading": bool(w.get("loading")),
-        "device": w.get("device"),
-    }]
+    variants = catalog.get("variants") or {}
+    entries: list[dict] = []
+    for name, info in variants.items():
+        entries.append({
+            "id": f"local/whisper-{name}",
+            "object": "model",
+            "owned_by": "local",
+            "kind": "stt",
+            "upstream_model": info.get("model", ""),
+            "loaded": bool(info.get("loaded")),
+            "loading": bool(info.get("loading")),
+            "error": info.get("error"),
+            "device": info.get("device"),
+            "size_gb": info.get("size_gb"),
+            "params_m": info.get("params_m"),
+            "notes": info.get("notes"),
+        })
+    # Stable order: tiny (lightest) → medium → large-v3
+    order = {"tiny": 0, "medium": 1, "large-v3": 2}
+    entries.sort(key=lambda m: order.get(m["id"].split("-", 1)[-1], 99))
+    return entries
 
 
 @router.get("")
@@ -98,20 +105,34 @@ async def model_info(
         raise HTTPException(404, f"unknown coqui speaker '{speaker}'")
     if id.startswith("local/whisper"):
         try:
-            h = await idn.health()
+            catalog = await idn.whisper_variants()
         except Exception:
-            h = None
-        w = (h or {}).get("whisper") if isinstance(h, dict) else None
-        if not w:
+            catalog = {}
+        if not catalog or not catalog.get("enabled"):
             raise HTTPException(404, "local whisper not available")
+        # Parse variant from the tail: local/whisper-<variant>
+        suffix = id[len("local/whisper"):].lstrip("-")
+        variants = catalog.get("variants") or {}
+        info = variants.get(suffix) if suffix else None
+        if not info:
+            # Fall back to the default variant for bare ``local/whisper``
+            default_name = catalog.get("default") or next(iter(variants.keys()), "")
+            info = variants.get(default_name) or {}
+            suffix = default_name
         return {
             "id": id,
-            "name": w.get("model", id),
+            "name": info.get("model", id),
             "kind": "stt",
             "owned_by": "local",
             "endpoint": "/v1/audio/transcriptions",
-            "loaded": w.get("loaded"),
-            "device": w.get("device"),
+            "variant": suffix,
+            "size_gb": info.get("size_gb"),
+            "params_m": info.get("params_m"),
+            "notes": info.get("notes"),
+            "loaded": info.get("loaded"),
+            "loading": info.get("loading"),
+            "error": info.get("error"),
+            "device": info.get("device"),
             "provider": "whisper (local)",
         }
     return await client.model_info(id)

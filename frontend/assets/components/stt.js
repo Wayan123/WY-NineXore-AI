@@ -74,11 +74,49 @@ async function buildView(root) {
     ),
   ));
 
-  // Whisper status card
+  // Whisper status card — per-variant status with a "load" button
   const s = getState();
   const idn = s.idnTts || {};
-  const whisperCard = renderWhisperCard(idn);
-  if (whisperCard) root.append(whisperCard);
+  const cardHost = el('div');
+  async function refreshWhisperCard() {
+    await refreshUpstream();
+    cardHost.innerHTML = '';
+    const idn2 = getState().idnTts || {};
+    const card = renderWhisperCard(idn2, onRequestLoad);
+    if (card) cardHost.appendChild(card);
+    // Also refresh the select so labels reflect loaded/loading.
+    await refreshKind('stt');
+    const allModels2 = modelList('stt');
+    modelSel.innerHTML = '';
+    modelSel.append(buildGroupedOptions(sortForDropdown(allModels2), state.model));
+  }
+  async function onRequestLoad(variant) {
+    try {
+      await fetch('/api/idn-tts/whisper/load?variant=' + encodeURIComponent(variant), { method: 'POST' });
+      toastGood('Loading ' + variant, 'Will be ready in a moment.');
+    } catch (e) {
+      toastError(e, 'Whisper load');
+      return;
+    }
+    // Poll every 2 s until the variant changes state.
+    const started = Date.now();
+    const poll = async () => {
+      await refreshWhisperCard();
+      const v = (getState().idnTts?.whisper?.variants || {})[variant];
+      if (!v) return;
+      if (v.loaded || v.error) {
+        if (v.loaded) toastGood(variant + ' ready');
+        else toastWarn(variant + ' load failed', String(v.error).slice(0, 140));
+        return;
+      }
+      if (Date.now() - started > 300_000) return;  // 5 min cap
+      setTimeout(poll, 2000);
+    };
+    setTimeout(poll, 1500);
+  }
+  const card = renderWhisperCard(idn, onRequestLoad);
+  if (card) cardHost.appendChild(card);
+  root.append(cardHost);
 
   const sorted = sortForDropdown(allModels);
   const modelSel = el('select', { onchange: (e) => { state.model = e.target.value; savePrefs(); } });
@@ -302,8 +340,16 @@ function buildGroupedOptions(models, selected) {
     for (const m of items) {
       const o = document.createElement('option');
       o.value = m.id;
-      const tag = m.loaded === false && m.loading ? ' (loading…)' :
-                  m.loaded === false ? ' (loads on first use)' : '';
+      let tag = '';
+      if (m.id?.startsWith('local/whisper')) {
+        // Rich labels for whisper variants: size + status
+        const size = m.size_gb ? `${m.size_gb} GB` : '';
+        if (m.error)         tag = ` — failed`;
+        else if (m.loading)  tag = ` — loading…`;
+        else if (m.loaded)   tag = ` — ready (${m.device || 'cpu'})`;
+        else                 tag = size ? ` — ${size}, downloads on first use` : ' — not loaded';
+      } else if (m.loaded === false && m.loading)      tag = ' (loading…)';
+      else if (m.loaded === false)                      tag = ' (loads on first use)';
       o.textContent = m.id + tag;
       if (m.id === selected) o.selected = true;
       grp.appendChild(o);
@@ -325,53 +371,72 @@ function buildGroupedOptions(models, selected) {
 
 
 
-function renderWhisperCard(idn) {
+function renderWhisperCard(idn, onRequestLoad) {
   if (!idn) return null;
   const w = idn.whisper || {};
   if (!idn.enabled || !w.enabled) return null;
   if (!idn.reachable) return null;
 
-  const name = (w.model || '').split('/').pop() || 'whisper';
-  const initials = name.slice(0, 2).toUpperCase();
+  const variants = w.variants || {};
+  const names = Object.keys(variants);
+  if (!names.length) return null;
 
-  // Surface load failures prominently — otherwise users see
-  // "will load on first request" while every attempt 503s.
-  if (w.error) {
-    return el('div', { class: 'callout bad' },
-      el('strong', {}, 'Local Whisper failed to load'),
-      ' \u2014 ', el('code', {}, w.model),
-      el('div', { class: 'mono mt-xs', style: { fontSize: '11px' } }, String(w.error).slice(0, 240)),
-    );
-  }
-
-  if (w.loaded) {
-    return el('div', { class: 'audio-waveform-card' },
-      el('div', { class: 'inline', style: { alignItems: 'center', gap: '14px' } },
-        el('div', { class: 'voice-icon', title: name }, initials),
-        el('div', { style: { flex: 1 } },
-          el('div', { class: 'inline', style: { gap: '8px' } },
-            el('span', { class: 'indicator-dot good' }),
-            el('strong', { style: { color: 'var(--ink)' } }, 'Local Whisper ready'),
-            el('span', { class: 'badge-uppercase accent' }, 'whisper'),
-          ),
-          el('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
-            w.model, ' · ', w.device || 'cuda', ' · transcripts stay on this machine',
-          ),
+  const card = el('div', { class: 'audio-waveform-card' },
+    el('div', { class: 'inline', style: { alignItems: 'center', gap: '14px', marginBottom: '10px' } },
+      el('div', { class: 'voice-icon', title: 'whisper' }, 'WH'),
+      el('div', { style: { flex: 1 } },
+        el('div', { class: 'inline', style: { gap: '8px' } },
+          el('strong', { style: { color: 'var(--ink)' } }, 'Local Whisper'),
+          el('span', { class: 'badge-uppercase accent' }, 'offline'),
         ),
+        el('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
+          'Audio stays on this machine. Pick a model that fits your hardware:'),
       ),
-    );
-  }
-
-  if (w.loading) {
-    return el('div', { class: 'callout warn' },
-      el('strong', {}, 'Local Whisper loading…'),
-      ' \u2014 ', el('code', {}, w.model), ' is warming up on GPU. This can take 10–30 s the first time.',
-    );
-  }
-
-  return el('div', { class: 'callout' },
-    el('strong', {}, 'Local Whisper available'),
-    ' \u2014 ', el('code', {}, w.model),
-    ' loads on your first transcribe request (~10–15 s, then ~0.5 s per clip).',
+    ),
   );
+
+  // rows per variant
+  const rows = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } });
+  for (const name of names) {
+    const v = variants[name];
+    let status, dotClass;
+    if (v.error) {
+      status = 'failed'; dotClass = 'bad';
+    } else if (v.loading) {
+      status = 'downloading / loading…'; dotClass = 'warn';
+    } else if (v.loaded) {
+      status = `ready · ${v.device || 'cpu'}`; dotClass = 'good';
+    } else {
+      status = 'not cached'; dotClass = '';
+    }
+
+    const loadBtn = (!v.loaded && !v.loading && !v.error)
+      ? el('button', {
+          class: 'btn btn-small',
+          onclick: () => onRequestLoad && onRequestLoad(name),
+        }, 'load')
+      : null;
+
+    rows.append(el('div', {
+      class: 'inline',
+      style: { gap: '10px', fontSize: '12px', padding: '4px 0',
+               borderBottom: '1px solid var(--hairline-soft)' },
+    },
+      el('span', { class: 'indicator-dot ' + dotClass }),
+      el('code', { style: { minWidth: '100px' } }, `local/whisper-${name}`),
+      el('span', { class: 'muted', style: { minWidth: '90px' } },
+        v.size_gb ? `${v.size_gb} GB` : ''),
+      el('span', { class: 'muted', style: { flex: 1 } }, status),
+      v.error ? el('span', { class: 'mono', style: { fontSize: '11px', color: 'var(--bad)' } },
+        String(v.error).slice(0, 80)) : null,
+      loadBtn,
+    ));
+  }
+  card.append(rows);
+
+  card.append(el('div', { class: 'muted mt-sm', style: { fontSize: '11px' } },
+    'First load downloads the model from HuggingFace (tiny ≈ 150 MB, medium ≈ 1.5 GB, large-v3 ≈ 2.9 GB). ',
+    'After that it stays resident and transcribes in <1 s.',
+  ));
+  return card;
 }

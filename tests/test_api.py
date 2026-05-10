@@ -109,6 +109,7 @@ class FakeIdnTTS:
     async def health(self): return None
     async def is_reachable(self): return False
     async def whisper_is_reachable(self): return False
+    async def whisper_variants(self): return {}
     async def speakers(self): return []
     async def default_speaker(self): return "wibowo"
     async def speak(self, text, speaker, speed=1.2): raise NotImplementedError
@@ -338,7 +339,8 @@ def test_stt_local_whisper_routes_to_idn_tts(client):
         async def whisper_transcribe(self, audio_bytes, filename, **kw):
             ReachableIdn.received = {"filename": filename, "bytes": len(audio_bytes), **kw}
             return {
-                "model": "openai/whisper-large-v3",
+                "variant": kw.get("variant") or "large-v3",
+                "model": "openai/whisper-" + (kw.get("variant") or "large-v3"),
                 "text": "halo dunia",
                 "language": kw.get("language"),
                 "duration": 1.5,
@@ -348,14 +350,15 @@ def test_stt_local_whisper_routes_to_idn_tts(client):
 
     files = {"file": ("clip.wav", b"RIFFmock", "audio/wav")}
     r = client.post("/api/stt/transcribe", data={
-        "model": "local/whisper-large-v3",
+        "model": "local/whisper-medium",
         "language": "id",
     }, files=files)
     assert r.status_code == 200
     data = r.json()
-    assert data["model"] == "local/whisper-large-v3"
+    assert data["model"] == "local/whisper-medium"
     assert data["result"]["text"] == "halo dunia"
-    assert data["preview"].startswith("halo dunia")
+    assert data["result"]["variant"] == "medium"
+    assert ReachableIdn.received["variant"] == "medium"
     assert ReachableIdn.received["language"] == "id"
     assert ReachableIdn.received["bytes"] == len(b"RIFFmock")
 
@@ -369,11 +372,23 @@ def test_models_stt_includes_local_whisper(client):
             "loaded": True,
             "whisper": {"enabled": True, "loaded": True, "model": "openai/whisper-large-v3", "device": "cuda"},
         }
+        async def whisper_variants(self): return {
+            "enabled": True,
+            "default": "large-v3",
+            "variants": {
+                "tiny":     {"model": "openai/whisper-tiny",     "loaded": False, "loading": False, "error": None, "device": None, "size_gb": 0.15, "params_m": 39,  "notes": "CPU-friendly"},
+                "medium":   {"model": "openai/whisper-medium",   "loaded": False, "loading": False, "error": None, "device": None, "size_gb": 1.5,  "params_m": 769, "notes": "balanced"},
+                "large-v3": {"model": "openai/whisper-large-v3", "loaded": True,  "loading": False, "error": None, "device": "cuda", "size_gb": 2.9, "params_m": 1550, "notes": "best"},
+            },
+        }
         async def speakers(self): return []
         async def default_speaker(self): return "wibowo"
     app.state.idn_tts = ReachableIdn()  # type: ignore
     r = client.get("/api/models?kind=stt")
     ids = [m["id"] for m in r.json()["data"]]
+    # All three variants should now be exposed
+    assert "local/whisper-tiny" in ids
+    assert "local/whisper-medium" in ids
     assert "local/whisper-large-v3" in ids
 
 

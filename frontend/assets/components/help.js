@@ -200,15 +200,22 @@ function ttsHelp() {
 
 function sttHelp() {
   return section('stt', 'Transcribe — audio → text',
-    p('Default: ', code('local/whisper-large-v3'), ' (offline, GPU-accelerated, akurat untuk Bahasa Indonesia).'),
+    p('Tiga varian Whisper lokal tersedia. Pilih sesuai spek mesin:'),
+    ul(
+      el('span', {}, code('local/whisper-tiny'), ' \u2014 ~150 MB, jalan di CPU, akurasi paling rendah.'),
+      el('span', {}, code('local/whisper-medium'), ' \u2014 ~1.5 GB, balance CPU/GPU, akurasi baik.'),
+      el('span', {}, code('local/whisper-large-v3'), ' \u2014 ~2.9 GB, butuh GPU ~4 GB VRAM, akurasi terbaik (default).'),
+    ),
+    p('Kalau varian belum ter-cache, tekan tombol ', code('load'), ' di samping baris varian \u2014 ',
+      'download di background, progress dipoll setiap 2 s. Anda juga bisa langsung submit audio: service auto-download + load pada request pertama.'),
     ul(
       el('span', {}, 'Drag audio file ke dropzone, atau klik ', code('record'), ' untuk rekam langsung dari browser.'),
       el('span', {}, 'Format yang didukung: MP3, WAV, M4A, WEBM, OGG, FLAC \u2014 cap 200 MB.'),
       el('span', {}, 'Isi ', code('language=id'), ' untuk Bahasa Indonesia (Whisper bisa auto-detect tapi hint meningkatkan akurasi).'),
       el('span', {}, 'Response format: ', code('json'), ' default, atau ', code('verbose_json'), ' / ', code('srt'), ' / ', code('vtt'), ' untuk subtitle.'),
     ),
-    callout('warn', 'Request pertama Whisper lambat (~10\u201315 s)',
-      'Model 2.9 GB di-load saat request pertama \u2014 ini disengaja agar startup service tidak menunggu. Request berikutnya <1 s pada GPU mid-range.'),
+    callout('warn', 'Request / load pertama per varian (~10\u201330 s)',
+      'Model di-download dari HuggingFace + dimuat ke GPU/CPU. Berikutnya <1 s pada GPU mid-range. Ukuran disk: tiny ~150 MB, medium ~1.5 GB, large-v3 ~2.9 GB.'),
   );
 }
 

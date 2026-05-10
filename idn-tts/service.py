@@ -47,8 +47,47 @@ SPEAKERS = MODELS_DIR / "speakers.pth"
 USE_CUDA = os.environ.get("IDN_TTS_USE_CUDA", "auto")
 SAMPLE_RATE_DEFAULT = 22050  # VITS default; overridden by model config
 
-WHISPER_MODEL_ID = os.environ.get("WHISPER_MODEL", "openai/whisper-large-v3")
 WHISPER_ENABLED = os.environ.get("WHISPER_ENABLED", "true").lower() in {"1", "true", "yes"}
+
+# Variants the dashboard may request. Keyed by short name (the suffix after
+# ``local/whisper-``), mapped to the HF model ID we pull with transformers.
+#
+# Order matters: the first entry is the default the dashboard picks when the
+# user hasn't chosen anything.
+WHISPER_VARIANTS: "dict[str, dict]" = {
+    "large-v3": {
+        "hf_id": "openai/whisper-large-v3",
+        "size_gb": 2.9,
+        "params_m": 1550,
+        "notes": "Best accuracy. Needs ~4 GB VRAM in fp16; very slow on CPU.",
+    },
+    "medium": {
+        "hf_id": "openai/whisper-medium",
+        "size_gb": 1.5,
+        "params_m": 769,
+        "notes": "Good balance. Works on CPU at ~1–2× realtime.",
+    },
+    "tiny": {
+        "hf_id": "openai/whisper-tiny",
+        "size_gb": 0.15,
+        "params_m": 39,
+        "notes": "Tiny (~150 MB). Fast on CPU, accuracy is lower.",
+    },
+}
+
+
+class _WhisperInstance:
+    """Per-variant runtime state."""
+    def __init__(self, hf_id: str):
+        self.hf_id: str = hf_id
+        self.model = None
+        self.processor = None
+        self.device: str = "cpu"
+        self.loaded: bool = False
+        self.loading: bool = False
+        self.error: Optional[str] = None
+        self.loaded_at: float = 0.0
+        self.lock = threading.Lock()
 
 # -------------------------------------------------------------------- state ---
 class ModelState:
@@ -61,14 +100,10 @@ class ModelState:
     loaded: bool = False
     load_error: Optional[str] = None
 
-    # STT (local Whisper)
-    whisper_model = None
-    whisper_processor = None
-    whisper_device: str = "cpu"
-    whisper_loaded: bool = False
-    whisper_loading: bool = False
-    whisper_error: Optional[str] = None
-    whisper_lock: threading.Lock = threading.Lock()
+    # STT (local Whisper, per variant)
+    whisper_instances: "dict[str, _WhisperInstance]" = {
+        v: _WhisperInstance(cfg["hf_id"]) for v, cfg in WHISPER_VARIANTS.items()
+    }
 
 state = ModelState()
 
@@ -139,19 +174,36 @@ def _load_models() -> None:
 #                          Whisper (local STT)
 # ===================================================================
 
-def _load_whisper_if_needed() -> None:
-    """Lazy-load Whisper large-v3 on first request.
+def _default_whisper_variant() -> str:
+    """Pick the default variant when the caller didn't specify one.
 
-    Deliberately not loaded at service boot: the 2.9 GB model is optional and
-    users may only ever use TTS. Once loaded it stays resident.
+    Strategy: prefer the first CUDA-enabled entry already loaded; otherwise the
+    first one in the map insertion order (``large-v3`` in our defaults).
     """
-    if state.whisper_loaded or not WHISPER_ENABLED:
-        return
+    for name, inst in state.whisper_instances.items():
+        if inst.loaded:
+            return name
+    return next(iter(state.whisper_instances.keys()))
 
-    with state.whisper_lock:
-        if state.whisper_loaded:
-            return
-        state.whisper_loading = True
+
+def _load_whisper_if_needed(variant: str) -> _WhisperInstance:
+    """Lazy-load a Whisper variant. Each variant is loaded at most once."""
+    if not WHISPER_ENABLED:
+        raise RuntimeError("Whisper disabled (WHISPER_ENABLED=false)")
+    if variant not in state.whisper_instances:
+        raise ValueError(
+            f"unknown whisper variant '{variant}'. try one of: "
+            + ", ".join(state.whisper_instances.keys())
+        )
+    inst = state.whisper_instances[variant]
+    if inst.loaded:
+        return inst
+
+    with inst.lock:
+        if inst.loaded:
+            return inst
+        inst.loading = True
+        inst.error = None
         try:
             import torch
             from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
@@ -160,26 +212,28 @@ def _load_whisper_if_needed() -> None:
             dtype = torch.float16 if use_cuda else torch.float32
             dev = "cuda" if use_cuda else "cpu"
             t0 = time.time()
-            log.info("loading Whisper (%s) on %s…", WHISPER_MODEL_ID, dev)
-            processor = AutoProcessor.from_pretrained(WHISPER_MODEL_ID)
+            log.info("loading Whisper '%s' (%s) on %s…", variant, inst.hf_id, dev)
+            processor = AutoProcessor.from_pretrained(inst.hf_id)
             model = AutoModelForSpeechSeq2Seq.from_pretrained(
-                WHISPER_MODEL_ID,
+                inst.hf_id,
                 torch_dtype=dtype,
                 low_cpu_mem_usage=True,
                 use_safetensors=True,
             ).to(dev)
             model.eval()
-            state.whisper_processor = processor
-            state.whisper_model = model
-            state.whisper_device = dev
-            state.whisper_loaded = True
-            state.whisper_error = None
-            log.info("Whisper ready in %.1fs on %s", time.time() - t0, dev)
+            inst.processor = processor
+            inst.model = model
+            inst.device = dev
+            inst.loaded = True
+            inst.loaded_at = time.time()
+            log.info("Whisper '%s' ready in %.1fs on %s", variant, time.time() - t0, dev)
+            return inst
         except Exception as e:  # noqa: BLE001
-            log.exception("Whisper load failed")
-            state.whisper_error = str(e) or e.__class__.__name__
+            log.exception("Whisper '%s' load failed", variant)
+            inst.error = str(e) or e.__class__.__name__
+            raise
         finally:
-            state.whisper_loading = False
+            inst.loading = False
 
 
 def _decode_audio_to_16k(raw: bytes, filename: str = "") -> tuple["np.ndarray", int]:
@@ -216,11 +270,19 @@ def _whisper_transcribe(
     language: Optional[str] = None,
     task: str = "transcribe",
     return_segments: bool = False,
+    variant: Optional[str] = None,
 ) -> dict:
-    _load_whisper_if_needed()
-    if not state.whisper_loaded:
-        detail = state.whisper_error or ("loading in progress" if state.whisper_loading else "disabled")
-        raise RuntimeError(f"Whisper not ready: {detail}")
+    """Run audio through one Whisper variant. ``variant`` names a key from
+    ``WHISPER_VARIANTS`` (``large-v3``/``medium``/``tiny``). Defaults to the
+    first already-loaded variant, or ``large-v3``.
+    """
+    use_variant = variant or _default_whisper_variant()
+    try:
+        inst = _load_whisper_if_needed(use_variant)
+    except RuntimeError:
+        raise
+    except ValueError:
+        raise
 
     import numpy as np
     import torch
@@ -236,9 +298,9 @@ def _whisper_transcribe(
     # but the output is usually garbage. Let it through and warn via log.
     duration_s = audio.size / 16000.0
 
-    processor = state.whisper_processor
-    model = state.whisper_model
-    dev = state.whisper_device
+    processor = inst.processor
+    model = inst.model
+    dev = inst.device
     dtype = torch.float16 if dev == "cuda" else torch.float32
 
     inputs = processor(audio, sampling_rate=16000, return_tensors="pt")
@@ -269,6 +331,8 @@ def _whisper_transcribe(
         segments = []
 
     return {
+        "variant": use_variant,
+        "model": inst.hf_id,
         "text": text.strip(),
         "language": language or None,
         "duration": round(duration_s, 2),
@@ -390,6 +454,23 @@ class SpeechRequest(BaseModel):
 # ---------------------------------------------------------------- routes ---
 @app.get("/health")
 def health() -> dict:
+    # Aggregate per-variant whisper status for the dashboard.
+    any_loaded = any(i.loaded for i in state.whisper_instances.values())
+    any_loading = any(i.loading for i in state.whisper_instances.values())
+    any_error = next((i.error for i in state.whisper_instances.values() if i.error), None)
+    variants = {
+        v: {
+            "model": inst.hf_id,
+            "loaded": inst.loaded,
+            "loading": inst.loading,
+            "error": inst.error,
+            "device": inst.device if inst.loaded else None,
+            "size_gb": WHISPER_VARIANTS[v]["size_gb"],
+            "params_m": WHISPER_VARIANTS[v]["params_m"],
+            "notes": WHISPER_VARIANTS[v]["notes"],
+        }
+        for v, inst in state.whisper_instances.items()
+    }
     return {
         "ok": state.loaded,
         "loaded": state.loaded,
@@ -399,11 +480,16 @@ def health() -> dict:
         "error": state.load_error,
         "whisper": {
             "enabled": WHISPER_ENABLED,
-            "loaded": state.whisper_loaded,
-            "loading": state.whisper_loading,
-            "model": WHISPER_MODEL_ID,
-            "device": state.whisper_device if state.whisper_loaded else None,
-            "error": state.whisper_error,
+            # Aggregated — true if any variant is in that state.
+            "loaded": any_loaded,
+            "loading": any_loading,
+            "error": any_error,
+            # Backwards-compatible single-model fields: first loaded variant.
+            "model": next((i.hf_id for i in state.whisper_instances.values() if i.loaded),
+                          next(iter(state.whisper_instances.values())).hf_id),
+            "device": next((i.device for i in state.whisper_instances.values() if i.loaded), None),
+            "default_variant": _default_whisper_variant(),
+            "variants": variants,
         },
     }
 
@@ -456,14 +542,77 @@ def openai_speech(req: SpeechRequest) -> Response:
 #                    Whisper endpoints
 # ============================================================
 
+@app.get("/whisper/variants")
+def whisper_variants() -> dict:
+    """Catalogue of Whisper variants exposed by this service + their status."""
+    return {
+        "enabled": WHISPER_ENABLED,
+        "default": _default_whisper_variant(),
+        "variants": {
+            v: {
+                "model": inst.hf_id,
+                "loaded": inst.loaded,
+                "loading": inst.loading,
+                "error": inst.error,
+                "device": inst.device if inst.loaded else None,
+                **WHISPER_VARIANTS[v],
+            }
+            for v, inst in state.whisper_instances.items()
+        },
+    }
+
+
+def _kick_off_whisper_load(variant: str) -> None:
+    """Fire-and-forget a background thread that loads a variant. Returns
+    immediately; subsequent /health polls will see ``loading=true`` then
+    ``loaded=true``.
+    """
+    def _bg():
+        try:
+            _load_whisper_if_needed(variant)
+        except Exception:  # noqa: BLE001
+            pass
+    if variant not in state.whisper_instances:
+        return
+    inst = state.whisper_instances[variant]
+    if inst.loaded or inst.loading:
+        return
+    threading.Thread(target=_bg, name=f"whisper-load-{variant}", daemon=True).start()
+
+
+@app.post("/whisper/load")
+async def whisper_load(
+    variant: str = Form(..., description="tiny | medium | large-v3"),
+) -> dict:
+    """Kick off a background load of a variant without submitting audio.
+
+    Returns 202 with the current status so the caller can poll ``/health``
+    (or ``/whisper/variants``) for progress.
+    """
+    if variant not in state.whisper_instances:
+        raise HTTPException(
+            400, f"unknown variant '{variant}'. try one of: "
+                 + ", ".join(state.whisper_instances.keys()))
+    inst = state.whisper_instances[variant]
+    _kick_off_whisper_load(variant)
+    return {
+        "variant": variant,
+        "model": inst.hf_id,
+        "loaded": inst.loaded,
+        "loading": inst.loading or (not inst.loaded),  # just kicked off
+        "error": inst.error,
+    }
+
+
 @app.post("/whisper/transcribe")
 async def whisper_transcribe(
     file: UploadFile = File(...),
     language: Optional[str] = Form(default=None),
     task: Optional[str] = Form(default="transcribe"),
     return_segments: bool = Form(default=False),
+    variant: Optional[str] = Form(default=None, description="tiny | medium | large-v3"),
 ) -> dict:
-    """Transcribe an audio file using the locally-loaded Whisper model."""
+    """Transcribe an audio file using the selected Whisper variant."""
     raw = await file.read()
     if len(raw) > 200 * 1024 * 1024:
         raise HTTPException(413, f"file too large ({len(raw)} bytes; cap 200 MB)")
@@ -474,12 +623,13 @@ async def whisper_transcribe(
             language=language,
             task=task or "transcribe",
             return_segments=bool(return_segments),
+            variant=variant or None,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
     except RuntimeError as e:
         raise HTTPException(503, str(e))
-    return {"model": WHISPER_MODEL_ID, **result}
+    return result
 
 
 @app.post("/v1/audio/transcriptions")
@@ -491,14 +641,23 @@ async def openai_transcriptions(
     response_format: Optional[str] = Form(default="json"),
     temperature: Optional[float] = Form(default=None),
 ):
-    """OpenAI-compatible Whisper endpoint. Accepts the same multipart shape
-    as ``/v1/audio/transcriptions`` upstream. ``model`` and ``prompt`` are
-    accepted for compatibility but the service only serves the locally-
-    loaded model.
+    """OpenAI-compatible Whisper endpoint. ``model`` selects the variant
+    when it matches one of our keys (e.g. ``local/whisper-medium`` or
+    just ``medium``). Otherwise the default variant is used.
     """
     raw = await file.read()
     if len(raw) > 200 * 1024 * 1024:
         raise HTTPException(413, f"file too large ({len(raw)} bytes; cap 200 MB)")
+
+    # Resolve variant from the model field if possible.
+    variant = None
+    if model:
+        short = model.split("/")[-1]
+        if short in state.whisper_instances:
+            variant = short
+        elif short.startswith("whisper-") and short[len("whisper-"):] in state.whisper_instances:
+            variant = short[len("whisper-"):]
+
     try:
         result = _whisper_transcribe(
             raw,
@@ -506,6 +665,7 @@ async def openai_transcriptions(
             language=language,
             task="transcribe",
             return_segments=(response_format == "verbose_json"),
+            variant=variant,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))
