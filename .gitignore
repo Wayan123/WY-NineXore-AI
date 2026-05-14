@@ -51,6 +51,14 @@ tmp/
 # Keep local; do not push.
 social-media/
 
+# AI agent skill packs installed by scripts/install-skills.sh.
+# These are personal Codex / pi configurations — reproducible from the
+# upstream pack at github.com/Wayan123/my-grand-project-skills.
+# See SKILLS.md for the chosen profile and rationale.
+.agents/skills/
+.skill-evolution/
+.adaptive-architect/
+
 # ----- Node / frontend (we don't use one, but safeguard) --------------------
 node_modules/
 package-lock.json

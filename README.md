@@ -439,6 +439,24 @@ Use `./run.sh` which handles process lifetime cleanly, or `nohup uvicorn backend
 
 ---
 
+## Skills (for AI coding agents)
+
+This project pairs with a curated AI-agent skill pack from
+[my-grand-project-skills](https://github.com/Wayan123/my-grand-project-skills) —
+planning, debugging, secret scanning, release management, design discipline,
+and more. Skills live locally at `.agents/skills/` (gitignored). One command
+installs or upgrades them with smart-sync:
+
+```bash
+bash scripts/install-skills.sh           # smart-sync
+bash scripts/install-skills.sh --dry-run # preview, no writes
+```
+
+See [`SKILLS.md`](./SKILLS.md) for the full list of installed skills and the
+reasoning behind each pick.
+
+---
+
 ## Credits
 
 - [9Router](https://github.com/decolua/9router) by decolua — the gateway this project sits on top of.
