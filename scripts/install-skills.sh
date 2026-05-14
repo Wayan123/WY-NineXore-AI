@@ -97,36 +97,63 @@ bash "$GRAND_SKILLS_REPO/scripts/bootstrap.sh" \
   "$@"
 
 # ---------------------------------------------------------------------------
-# Extra step: fetch 9Router gateway skills.
+# Extra step: install 9Router gateway skills.
 #
-# These are not part of my-grand-project-skills — they live alongside the
-# 9Router source at github.com/decolua/9router/skills/. They give AI agents
-# the right context for the gateway endpoints this dashboard sits on top of.
+# These markdown skill cards describe the OpenAI-compatible endpoints exposed
+# by the 9Router gateway (chat / TTS / STT / image / embeddings / web-search /
+# web-fetch). They are CONTENT, not code: AI coding agents read them to pick
+# the right provider IDs and request shapes.
+#
+# Source priority:
+#   1. Vendored snapshot at vendor/9router-skills/  (committed, tracked)
+#   2. External clone at $NINEROUTER_SKILLS_REPO    (legacy fallback)
+#
+# To refresh the vendored snapshot from upstream, run:
+#   scripts/sync-9router-skills.sh
 # ---------------------------------------------------------------------------
+VENDORED_NINEROUTER="$PROJECT_ROOT/vendor/9router-skills"
 NINEROUTER_SKILLS_REPO="${NINEROUTER_SKILLS_REPO:-${HOME}/AI/9router-skills-source}"
 
-if [[ -d "$NINEROUTER_SKILLS_REPO/skills" ]]; then
+NINEROUTER_SRC=""
+NINEROUTER_SRC_KIND=""
+if [[ -d "$VENDORED_NINEROUTER" ]]; then
+  NINEROUTER_SRC="$VENDORED_NINEROUTER"
+  NINEROUTER_SRC_KIND="vendored"
+elif [[ -d "$NINEROUTER_SKILLS_REPO/skills" ]]; then
+  NINEROUTER_SRC="$NINEROUTER_SKILLS_REPO/skills"
+  NINEROUTER_SRC_KIND="external clone"
+fi
+
+if [[ -n "$NINEROUTER_SRC" ]]; then
   echo ""
-  echo "[install-skills] copying 9router skills from $NINEROUTER_SKILLS_REPO/skills/..."
-  for src in "$NINEROUTER_SKILLS_REPO/skills/"*/; do
+  echo "[install-skills] copying 9router skills from $NINEROUTER_SRC ($NINEROUTER_SRC_KIND)..."
+  shopt -s nullglob
+  for src in "$NINEROUTER_SRC/"*/; do
     name="$(basename "$src")"
-    [[ "$name" == "README.md" ]] && continue
+    # skip non-skill artifacts
+    case "$name" in
+      README*|UPSTREAM*) continue ;;
+    esac
     if [[ ! -d "$DEST/$name" ]]; then
       cp -r "$src" "$DEST/$name"
       echo "  + $name"
     fi
   done
+  shopt -u nullglob
 else
   cat <<EOF
 
-[install-skills] note: 9Router skills not fetched.
-  Optional context wrappers describing the 9Router gateway endpoints.
-  To pull them, clone the 9Router repo and re-run:
+[install-skills] note: 9Router skills not installed.
+  No vendored snapshot at $VENDORED_NINEROUTER
+  and no external clone at $NINEROUTER_SKILLS_REPO/skills.
 
+  Either re-run after vendoring:
+    bash scripts/sync-9router-skills.sh
+
+  Or clone the upstream and override:
     git clone https://github.com/decolua/9router.git \\
         "\$HOME/AI/9router-skills-source"
-    bash scripts/install-skills.sh
-
-  Override the path with NINEROUTER_SKILLS_REPO=/path/to/clone.
+    NINEROUTER_SKILLS_REPO="\$HOME/AI/9router-skills-source" \\
+        bash scripts/install-skills.sh
 EOF
 fi

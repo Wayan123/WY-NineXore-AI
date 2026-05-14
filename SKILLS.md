@@ -56,11 +56,24 @@ frontend, no SaaS infra, no multi-tenant, no public web exposure (binds to
 
 ### 9Router gateway context
 
-Fetched from the upstream [decolua/9router](https://github.com/decolua/9router)
-repo and copied into `.agents/skills/` alongside the curated profile. These
-model cards explain the live gateway endpoints this dashboard sits on top
-of, so AI agents picking up the project know which provider IDs / model
+These model cards explain the live gateway endpoints this dashboard sits on
+top of, so AI agents picking up the project know which provider IDs / model
 formats / response shapes to use without hitting docs.
+
+The canonical source is the **vendored snapshot** at `vendor/9router-skills/`
+(committed). It is built from upstream
+[decolua/9router](https://github.com/decolua/9router); see
+`vendor/9router-skills/UPSTREAM.yaml` for the exact commit + tag.
+
+A fresh clone of WY-NineXore-AI is **self-contained** — no separate
+`9router-skills-source` checkout is required. To refresh the snapshot from
+upstream when the gateway adds providers, run:
+
+```bash
+bash scripts/sync-9router-skills.sh --pull
+git add vendor/9router-skills
+git commit -m "chore: refresh 9router skills snapshot"
+```
 
 | Skill | Purpose |
 | --- | --- |
@@ -99,11 +112,13 @@ The custom profile lives in the upstream pack at
 `profiles/wy-nine-xore-local-tool/skills.list`.
 
 ```bash
-# clone the upstream packs once
-git clone https://github.com/Wayan123/my-grand-project-skills.git ~/AI/my-grand-project-skills
-git clone https://github.com/decolua/9router.git                  ~/AI/9router-skills-source
+# 1. Clone the my-grand-project-skills pack once.
+git clone https://github.com/Wayan123/my-grand-project-skills.git \
+    ~/AI/my-grand-project-skills
 
-# from the project root, run the wrapper
+# 2. From the project root, run the wrapper. The 9Router skill cards are
+#    served from the vendored snapshot at vendor/9router-skills/, so no
+#    separate decolua/9router clone is needed for a stock install.
 bash scripts/install-skills.sh
 ```
 
@@ -111,7 +126,8 @@ Flags forwarded to the upstream bootstrap: `--dry-run`, `--force`,
 `--verbose`, `--no-deps`, `--no-conflicts`.
 
 Override source paths with `GRAND_SKILLS_REPO=/path/to/clone` or
-`NINEROUTER_SKILLS_REPO=/path/to/clone` env vars.
+`NINEROUTER_SKILLS_REPO=/path/to/clone` env vars. The 9Router source order
+of preference is: vendored snapshot → `NINEROUTER_SKILLS_REPO` clone.
 
 Smart-sync rules apply (see the upstream README): unchanged skills are
 skipped, older ones upgraded with a backup taken first, newer or diverged
@@ -122,11 +138,19 @@ local copies are preserved. A decision report is written to
 ## How to upgrade later
 
 ```bash
+# Refresh the my-grand-project-skills clone, then re-run the installer.
 cd ~/AI/my-grand-project-skills && git pull
 cd /path/to/WY-NineXore-AI
 bash scripts/install-skills.sh           # smart-sync (keeps customisations)
 # or, force overwrite even on diverged local copies (a backup is taken):
 bash scripts/install-skills.sh --force
+
+# Refresh the vendored 9Router skill snapshot when the gateway adds new
+# providers or endpoints. Requires a clone of decolua/9router somewhere
+# (default: ~/AI/9router-skills-source).
+bash scripts/sync-9router-skills.sh --pull
+git add vendor/9router-skills
+git commit -m "chore: refresh 9router skills snapshot"
 ```
 
 The skill-evolution-engine itself will surface a one-line notice when an

@@ -1,0 +1,16 @@
+# Snapshot provenance for the 9Router skill cards vendored into this repo.
+#
+# These markdown skill cards (`9router*`) describe the OpenAI-compatible
+# endpoints exposed by the 9Router gateway (chat / TTS / STT / image /
+# embeddings / web-search / web-fetch). They are CONTENT, not code: AI
+# coding agents read them to pick the right provider IDs and request shapes.
+#
+# Re-vendored by: scripts/sync-9router-skills.sh
+upstream:
+  repo: https://github.com/decolua/9router
+  branch: master
+  commit: cebc72e3438dca5aad69b2828cb0d0f2e54b168d
+  ref: tags/v0.4.41
+  commit_date: 2026-05-14T11:16:52+07:00
+  vendored_at: 2026-05-14T13:10:48Z
+  vendored_by: scripts/sync-9router-skills.sh
