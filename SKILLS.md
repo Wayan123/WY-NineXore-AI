@@ -54,6 +54,26 @@ frontend, no SaaS infra, no multi-tenant, no public web exposure (binds to
 | `api-contract-design` | Contract-first REST/GraphQL/gRPC/WebSocket with versioning, error model, idempotency, SDK generation. Useful for the OpenAI-compat endpoints (`/v1/chat/completions`, `/v1/audio/transcriptions`, etc.). |
 | `observability-stack` | OpenTelemetry-first logs / metrics / traces / errors / dashboards / SLO alerts. Useful for the FastAPI + idn-tts services. |
 
+### 9Router gateway context
+
+Fetched from the upstream [decolua/9router](https://github.com/decolua/9router)
+repo and copied into `.agents/skills/` alongside the curated profile. These
+model cards explain the live gateway endpoints this dashboard sits on top
+of, so AI agents picking up the project know which provider IDs / model
+formats / response shapes to use without hitting docs.
+
+| Skill | Purpose |
+| --- | --- |
+| `9router` | Setup + auth notes for the gateway. |
+| `9router-chat` | `/v1/chat/completions` flow, streaming, tool calling. |
+| `9router-tts` | `/v1/audio/speech` voice IDs across OpenAI / ElevenLabs / Edge / Google / Deepgram / Inworld / Coqui / Tortoise / NVIDIA / Cartesia / PlayHT / MiniMax. |
+| `9router-stt` | `/v1/audio/transcriptions` for OpenAI / Groq / Gemini / Deepgram / AssemblyAI / NVIDIA / HuggingFace. |
+| `9router-embeddings` | `/v1/embeddings`. |
+| `9router-image` | `/v1/images/generations` and edit endpoints. |
+| `9router-web-fetch` | `/v1/web/fetch`. |
+| `9router-web-search` | `/v1/web/search`. |
+
+
 ### Skipped (don't apply to a localhost dev tool)
 
 These exist in the upstream pack but are deliberately **not** installed here:
@@ -79,12 +99,19 @@ The custom profile lives in the upstream pack at
 `profiles/wy-nine-xore-local-tool/skills.list`.
 
 ```bash
-# clone the upstream pack once
+# clone the upstream packs once
 git clone https://github.com/Wayan123/my-grand-project-skills.git ~/AI/my-grand-project-skills
+git clone https://github.com/decolua/9router.git                  ~/AI/9router-skills-source
 
 # from the project root, run the wrapper
 bash scripts/install-skills.sh
 ```
+
+Flags forwarded to the upstream bootstrap: `--dry-run`, `--force`,
+`--verbose`, `--no-deps`, `--no-conflicts`.
+
+Override source paths with `GRAND_SKILLS_REPO=/path/to/clone` or
+`NINEROUTER_SKILLS_REPO=/path/to/clone` env vars.
 
 Smart-sync rules apply (see the upstream README): unchanged skills are
 skipped, older ones upgraded with a backup taken first, newer or diverged

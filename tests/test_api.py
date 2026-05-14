@@ -113,6 +113,10 @@ class FakeIdnTTS:
     async def speakers(self): return []
     async def default_speaker(self): return "wibowo"
     async def speak(self, text, speaker, speed=1.2): raise NotImplementedError
+    # Supertonic stubs — default to disabled/unreachable
+    async def supertonic_is_reachable(self): return False
+    async def supertonic_voices(self): return {}
+    async def supertonic_languages(self): return {}
 
 
 @pytest.fixture
@@ -439,3 +443,133 @@ def test_session_system_can_be_patched(client):
     assert r.json()["system"] == "second"
     r = client.get(f"/api/chat/sessions/{sid}")
     assert r.json()["system"] == "second"
+
+
+# --- Supertonic TTS integration --------------------------------------------
+
+def test_models_tts_includes_supertonic(client):
+    """/api/models?kind=tts should surface 10 supertonic voices when the
+    local SDK reports as enabled."""
+    class ReachableIdn:
+        enabled = True
+        base = "http://fake-idn.local"
+
+        async def aclose(self): pass
+        async def health(self): return {"loaded": True, "supertonic": {"enabled": True, "loaded": True}}
+        async def is_reachable(self): return True
+        async def whisper_is_reachable(self): return False
+        async def whisper_variants(self): return {}
+        async def speakers(self): return []
+        async def default_speaker(self): return "wibowo"
+        async def supertonic_is_reachable(self): return True
+        async def supertonic_voices(self):
+            return {
+                "enabled": True,
+                "loaded": True,
+                "loading": False,
+                "error": None,
+                "device": "cpu",
+                "voices_source": "cache",
+                "voices": [
+                    {"name": n, "family": "M" if n[0] == "M" else "F", "source": "cache"}
+                    for n in ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5")
+                ],
+                "sample_rate": 24000,
+            }
+        async def supertonic_languages(self):
+            return {
+                "default": "en",
+                "languages": [{"code": c, "label": c.upper()} for c in
+                              ("en", "ko", "ja", "id", "vi", "fr", "de", "es")],
+            }
+
+    app.state.idn_tts = ReachableIdn()  # type: ignore
+    r = client.get("/api/models?kind=tts")
+    assert r.status_code == 200
+    ids = [m["id"] for m in r.json()["data"]]
+    # All ten stock voices present
+    for n in ("M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"):
+        assert f"supertonic/{n}" in ids
+    # Per-entry metadata
+    m1 = next(m for m in r.json()["data"] if m["id"] == "supertonic/M1")
+    assert m1["voice_family"] == "M"
+    assert m1["loaded"] is True
+    assert "en" in m1["languages"]
+
+
+def test_tts_supertonic_routes_to_idn_tts(client):
+    """POST /api/tts/speak with model=supertonic/<voice> must reach the
+    local idn-tts client with both `voice` and `language` kwargs."""
+    captured = {}
+
+    class ReachableIdn:
+        enabled = True
+        base = "http://fake-idn.local"
+        async def aclose(self): pass
+        async def health(self): return {"loaded": True, "supertonic": {"enabled": True}}
+        async def is_reachable(self): return True
+        async def whisper_is_reachable(self): return False
+        async def whisper_variants(self): return {}
+        async def speakers(self): return []
+        async def default_speaker(self): return "wibowo"
+        async def supertonic_is_reachable(self): return True
+        async def supertonic_voices(self): return {"enabled": True, "voices": []}
+        async def supertonic_languages(self): return {"default": "en", "languages": []}
+        async def supertonic_speak(self, text, *, voice="M1", language="en", speed=1.05):
+            captured["text"] = text
+            captured["voice"] = voice
+            captured["language"] = language
+            captured["speed"] = speed
+            # Minimal valid WAV header (44 bytes RIFF) + 4 silent samples
+            return (b"RIFF" + b"\x00" * 40 + b"\x00\x00\x00\x00", "audio/wav")
+
+    app.state.idn_tts = ReachableIdn()  # type: ignore
+
+    body = {
+        "model": "supertonic/F2",
+        "input": "Halo, ini uji coba bahasa Indonesia.",
+        "language": "id",
+        "speed": 1.2,
+    }
+    r = client.post("/api/tts/speak", json=body)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["model"] == "supertonic/F2"
+    assert data["language"] == "id"
+    # The local client really got called with the right kwargs
+    assert captured["voice"] == "F2"
+    assert captured["language"] == "id"
+    assert captured["speed"] == 1.2
+
+
+def test_tts_supertonic_unsupported_lang_returns_400(client):
+    """Bogus language codes should fail loudly (with a help link), not
+    silently be coerced to 'en' by the local service."""
+    class ReachableIdn:
+        enabled = True
+        base = "http://fake-idn.local"
+        async def aclose(self): pass
+        async def health(self): return {"loaded": True, "supertonic": {"enabled": True}}
+        async def is_reachable(self): return True
+        async def whisper_is_reachable(self): return False
+        async def whisper_variants(self): return {}
+        async def speakers(self): return []
+        async def default_speaker(self): return "wibowo"
+        async def supertonic_is_reachable(self): return True
+        async def supertonic_voices(self): return {"enabled": True, "voices": []}
+        async def supertonic_languages(self): return {"default": "en", "languages": []}
+        async def supertonic_speak(self, *a, **kw):
+            raise AssertionError("should not have reached the local service")
+
+    app.state.idn_tts = ReachableIdn()  # type: ignore
+
+    r = client.post(
+        "/api/tts/speak",
+        json={"model": "supertonic/M1", "input": "hi", "language": "xx"},
+    )
+    assert r.status_code == 400
+    body = r.json()
+    detail = body.get("detail") or ""
+    assert "xx" in detail
+    # Hint to the catalog endpoint should be present
+    assert "/supertonic/languages" in detail

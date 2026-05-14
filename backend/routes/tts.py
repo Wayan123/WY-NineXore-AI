@@ -15,7 +15,15 @@ from pydantic import BaseModel, Field
 
 from ..client import NineRouterClient
 from ..config import Settings
-from ..idn_tts import IdnTTSClient, IdnTTSError, coqui_speaker_from_model, is_coqui_model
+from ..idn_tts import (
+    IdnTTSClient,
+    IdnTTSError,
+    coqui_speaker_from_model,
+    is_coqui_model,
+    is_supertonic_model,
+    is_supertonic_language,
+    supertonic_voice_from_model,
+)
 from ..storage.db import HistoryStore
 from ..utils import ext_from_ctype, slugify, unique_path
 from .deps import get_client, get_idn_tts, get_settings_dep, get_store
@@ -28,7 +36,9 @@ class TTSRequest(BaseModel):
     input: str
     voice: Optional[str] = None
     speed: float = Field(default=1.2, ge=0.5, le=2.5,
-                        description="Applies only to the local Coqui service for now.")
+                        description="Applies to local Coqui and Supertonic.")
+    language: Optional[str] = Field(default=None,
+                        description="ISO-639-1 code. Used by Supertonic; ignored elsewhere.")
     extra: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -116,6 +126,77 @@ async def speak(
             "url": f"/files/{rel}",
             "content_type": ctype,
             "bytes": len(blob),
+            "speed": req.speed,
+        }
+
+    # --- Supertonic on-device TTS branch (31 languages) ---------------------
+    if is_supertonic_model(req.model) or is_supertonic_model(req.voice or ""):
+        voice = supertonic_voice_from_model(req.voice or "") or supertonic_voice_from_model(req.model)
+        voice = voice or "M1"
+        language = (req.language or "").strip().lower() or "en"
+        if not is_supertonic_language(language):
+            raise HTTPException(
+                400,
+                f"Supertonic does not support language '{language}'. "
+                f"GET /api/idn-tts/supertonic/languages for the full list.",
+            )
+
+        if not idn.enabled:
+            raise HTTPException(503, "Local TTS service is disabled (IDN_TTS_ENABLED=false).")
+        # Note: we don't gate Supertonic on the Coqui-TTS load. Supertonic
+        # is its own loader. We only need the service process to be alive
+        # and the SDK importable.
+        if not await idn.supertonic_is_reachable():
+            raise HTTPException(
+                503,
+                "Supertonic SDK is not installed in the local TTS env, "
+                "or the local service is unreachable. "
+                "Run: conda activate torch-gpu && pip install supertonic",
+            )
+
+        # First-time call may block while the 260 MB bundle downloads.
+        # The client uses a 180 s read timeout, which is enough for a
+        # warm cache + cold load on a typical home connection.
+        try:
+            blob, ctype = await idn.supertonic_speak(
+                req.input,
+                voice=voice,
+                language=language,
+                speed=req.speed,
+            )
+        except IdnTTSError:
+            raise
+
+        ext = ext_from_ctype(ctype, "wav")
+        dst = unique_path(
+            settings.outputs_path,
+            slugify(req.input[:40] or f"supertonic-{voice}-{language}"),
+            ext,
+        )
+        dst.write_bytes(blob)
+        rel = f"outputs/{dst.name}"
+        out_id = store.log_output(
+            kind="tts",
+            model=f"supertonic/{voice}",
+            prompt=req.input,
+            result={
+                "content_type": ctype,
+                "bytes": len(blob),
+                "provider": "supertonic",
+                "language": language,
+                "speed": req.speed,
+            },
+            file_path=rel,
+        )
+        return {
+            "id": out_id,
+            "model": f"supertonic/{voice}",
+            "input": req.input,
+            "file": rel,
+            "url": f"/files/{rel}",
+            "content_type": ctype,
+            "bytes": len(blob),
+            "language": language,
             "speed": req.speed,
         }
 

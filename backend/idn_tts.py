@@ -163,13 +163,95 @@ class IdnTTSClient:
             raise IdnTTSError(r.status_code, body)
         return r.json()
 
+    # ------------------------------------------------------- supertonic
+    async def supertonic_voices(self) -> dict:
+        """Catalogue of Supertonic voices + load status."""
+        try:
+            r = await self._client.get("/supertonic/voices", timeout=3.0)
+            if r.status_code >= 400:
+                return {}
+            return r.json()
+        except Exception:
+            return {}
+
+    async def supertonic_languages(self) -> dict:
+        """31 supported language codes + English labels."""
+        try:
+            r = await self._client.get("/supertonic/languages", timeout=3.0)
+            if r.status_code >= 400:
+                return {}
+            return r.json()
+        except Exception:
+            return {}
+
+    async def supertonic_load(self) -> dict:
+        """Kick off a background load of the Supertonic model."""
+        r = await self._client.post("/supertonic/load", timeout=10.0)
+        if r.status_code >= 400:
+            try:
+                body = r.json()
+            except Exception:
+                body = r.text
+            raise IdnTTSError(r.status_code, body)
+        return r.json()
+
+    async def supertonic_speak(
+        self,
+        text: str,
+        *,
+        voice: str = "M1",
+        language: str = "en",
+        speed: float = 1.05,
+    ) -> tuple[bytes, str]:
+        """Synthesise speech via the Supertonic loader.
+
+        Returns ``(audio_bytes, content_type)``. Raises IdnTTSError
+        on a non-2xx (e.g. unknown language). Long blocks possible on
+        first call (~30-90 s download).
+        """
+        data = {
+            "text": text,
+            "voice": voice,
+            "language": language,
+            "speed": str(speed),
+        }
+        # Allow plenty of time for first-call download + cold load.
+        r = await self._client.post("/supertonic/speak", data=data, timeout=180.0)
+        if r.status_code >= 400:
+            try:
+                body = r.json()
+            except Exception:
+                body = r.text
+            raise IdnTTSError(r.status_code, body)
+        return r.content, r.headers.get("content-type", "audio/wav")
+
+    async def supertonic_is_reachable(self) -> bool:
+        """True if the SDK is enabled on the local service. The model
+        does not need to be loaded yet — lazy-load handles that.
+        """
+        h = await self.health()
+        if not h:
+            return False
+        s = h.get("supertonic") or {}
+        return bool(s.get("enabled"))
+
 
 # --------------------------------------------------------- helper constants
 _COQUI_MODEL_PREFIX = "coqui/"
 _WHISPER_MODEL_PREFIX = "local/whisper"
+_SUPERTONIC_MODEL_PREFIX = "supertonic/"
 
 # Variants we surface to the UI. Must match WHISPER_VARIANTS in idn-tts/service.py
 _WHISPER_VARIANTS = ("tiny", "medium", "large-v3")
+
+# 31 ISO-639-1 codes Supertonic supports. Must match SUPPORTED_LANGUAGES
+# in idn-tts/supertonic_tts.py.
+_SUPERTONIC_LANGS = (
+    "en", "ko", "ja", "ar", "bg", "cs", "da", "de", "el", "es",
+    "et", "fi", "fr", "hi", "hr", "hu", "id", "it", "lt", "lv",
+    "nl", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "tr", "uk",
+    "vi",
+)
 
 
 def is_coqui_model(model: str) -> bool:
@@ -178,6 +260,19 @@ def is_coqui_model(model: str) -> bool:
 
 def coqui_speaker_from_model(model: str) -> str:
     return model[len(_COQUI_MODEL_PREFIX):] if is_coqui_model(model) else ""
+
+
+def is_supertonic_model(model: str) -> bool:
+    return bool(model) and model.startswith(_SUPERTONIC_MODEL_PREFIX)
+
+
+def supertonic_voice_from_model(model: str) -> str:
+    """Pull the voice basename from ``supertonic/<voice>``."""
+    return model[len(_SUPERTONIC_MODEL_PREFIX):] if is_supertonic_model(model) else ""
+
+
+def is_supertonic_language(code: str) -> bool:
+    return bool(code) and code in _SUPERTONIC_LANGS
 
 
 def is_local_whisper_model(model: str) -> bool:

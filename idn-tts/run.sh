@@ -39,9 +39,10 @@ if [[ ! -s "models/checkpoint_1260000-inference.pth" ]]; then
 fi
 
 # --- 3. Deps (should already be satisfied by root requirements.txt) ----------
-if ! python -c "import TTS, g2p_id, transformers, fastapi, uvicorn" 2>/dev/null; then
-  echo "installing service deps..."
-  pip install -q -r ../requirements.txt
+if ! python -c "import TTS, g2p_id, transformers, fastapi, uvicorn, supertonic" 2>/dev/null; then
+  echo "deps missing. running scripts/install-deps.sh ..."
+  bash "$(dirname "$0")/../scripts/install-deps.sh"
+  echo
 fi
 
 # --- 4. Run -------------------------------------------------------------------

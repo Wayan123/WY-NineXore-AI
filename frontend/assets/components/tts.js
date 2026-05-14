@@ -16,17 +16,19 @@ function savePrefs() {
 
 /**
  * Sort TTS models so the most-likely useful voices are at the top:
- *   1. named Coqui (wibowo, ardi, gadis) — Indonesian named voices
- *   2. all upstream 9Router voices (nvidia, openai, el, edge-tts, ...)
- *   3. regional Coqui (coqui/JV-*, coqui/SU-*) at the bottom
+ *   1. Supertonic on-device voices (M1…M5, F1…F5)
+ *   2. named Coqui (wibowo, ardi, gadis) — Indonesian named voices
+ *   3. all upstream 9Router voices (nvidia, openai, el, edge-tts, ...)
+ *   4. regional Coqui (coqui/JV-*, coqui/SU-*) at the bottom
  */
 function sortForDropdown(models) {
   const NAMED_COQUI = new Set(['coqui/wibowo', 'coqui/ardi', 'coqui/gadis']);
   const rank = (m) => {
     const id = m.id || '';
-    if (NAMED_COQUI.has(id)) return 0;
-    if (!id.startsWith('coqui/')) return 1;
-    return 2;
+    if (id.startsWith('supertonic/')) return 0;
+    if (NAMED_COQUI.has(id)) return 1;
+    if (!id.startsWith('coqui/')) return 2;
+    return 3;
   };
   return [...models].sort((a, b) => {
     const ra = rank(a), rb = rank(b);
@@ -87,6 +89,43 @@ async function buildView(root) {
   const idnCard = renderIdnCard(idn);
   if (idnCard) root.append(idnCard);
 
+  // Supertonic status card (only when SDK enabled)
+  const supertonicCardHost = el('div');
+  async function refreshSupertonicCard() {
+    supertonicCardHost.innerHTML = '';
+    let info = null;
+    try {
+      info = await apiGet('/api/idn-tts/supertonic/voices');
+    } catch (_) {}
+    const card = renderSupertonicCard(info, async () => {
+      try {
+        await apiJSON('/api/idn-tts/supertonic/load', {});
+        toastGood('Loading Supertonic', '~30–90 s on first download (260 MB).');
+      } catch (e) { toastError(e, 'Supertonic load'); return; }
+      const t0 = Date.now();
+      const poll = async () => {
+        await refreshSupertonicCard();
+        let info2 = null;
+        try { info2 = await apiGet('/api/idn-tts/supertonic/voices'); } catch (_) {}
+        if (!info2) return;
+        if (info2.loaded || info2.error) {
+          if (info2.loaded) toastGood('Supertonic ready', `${info2.voices?.length || 0} voices · ${info2.device || 'cpu'}`);
+          else toastWarn('Supertonic load failed', String(info2.error).slice(0, 140));
+          // refresh model dropdown so loaded flag flows into option labels
+          await refreshKind('tts');
+          await buildView(root);
+          return;
+        }
+        if (Date.now() - t0 > 300_000) return;
+        setTimeout(poll, 2000);
+      };
+      setTimeout(poll, 1500);
+    });
+    if (card) supertonicCardHost.appendChild(card);
+  }
+  refreshSupertonicCard();
+  root.append(supertonicCardHost);
+
   // --- form ------------------------------------------------------------
   const sorted = sortForDropdown(allModels);
 
@@ -98,15 +137,21 @@ async function buildView(root) {
       refreshVoices();
       updatePlaceholder();
       updateSpeedVisibility();
+      updateLangVisibility();
     },
   });
   modelSel.append(buildGroupedOptions(sorted, state.model));
 
   function updatePlaceholder() {
     if (!textTA) return;
-    textTA.placeholder = (state.model || '').startsWith('coqui/')
-      ? 'Tulis kalimat dalam Bahasa Indonesia…'
-      : 'Type what you want spoken…';
+    const m = state.model || '';
+    if (m.startsWith('coqui/')) {
+      textTA.placeholder = 'Tulis kalimat dalam Bahasa Indonesia…';
+    } else if (m.startsWith('supertonic/')) {
+      textTA.placeholder = 'Type any of 31 supported languages — EN, ID, JA, KO, FR, DE, ES, AR…';
+    } else {
+      textTA.placeholder = 'Type what you want spoken…';
+    }
   }
 
   const coquiHint = el('div', { class: 'hint-card mt-xs', style: { display: 'none' } });
@@ -144,15 +189,33 @@ async function buildView(root) {
   });
   textTA.value = state.text || '';
 
-  // Sample helpers — load a phrase in the right language
+  // Sample helpers — load a phrase in the right language. When a Supertonic
+  // voice is selected, the sample's lang code is also pushed into the language
+  // dropdown so the user doesn't have to switch it manually.
   const samples = [
-    { label: 'sample · id', text: 'Selamat pagi, apa kabar hari ini? Semoga harimu menyenangkan.' },
-    { label: 'sample · en', text: 'Hello there. This is a quick test of the speech system.' },
+    { label: 'id',  lang: 'id', text: 'Selamat pagi, apa kabar hari ini? Semoga harimu menyenangkan.' },
+    { label: 'en',  lang: 'en', text: 'Hello there. This is a quick test of the speech system.' },
+    { label: 'ja',  lang: 'ja', text: 'こんにちは、これは音声合成のテストです。' },
+    { label: 'ko',  lang: 'ko', text: '안녕하세요, 이것은 음성 합성 테스트입니다.' },
+    { label: 'fr',  lang: 'fr', text: 'Bonjour, ceci est un test rapide du système de synthèse vocale.' },
+    { label: 'vi',  lang: 'vi', text: 'Xin chào, đây là một bài kiểm tra giọng nói tiếng Việt.' },
   ];
-  const sampleRow = el('div', { class: 'inline', style: { marginTop: '6px', gap: '6px' } },
+  const sampleRow = el('div', { class: 'inline', style: { marginTop: '6px', gap: '6px', flexWrap: 'wrap' } },
+    el('span', { class: 'muted', style: { fontSize: '11px', alignSelf: 'center' } }, 'samples:'),
     ...samples.map(s => el('button', {
       class: 'btn btn-ghost btn-small',
-      onclick: () => { textTA.value = s.text; state.text = s.text; savePrefs(); },
+      onclick: () => {
+        textTA.value = s.text;
+        state.text = s.text;
+        // If a Supertonic voice is active, also flip the language picker.
+        if ((state.model || '').startsWith('supertonic/') && langSel) {
+          if ([...langSel.options].some(o => o.value === s.lang)) {
+            langSel.value = s.lang;
+            state.supertonicLang = s.lang;
+          }
+        }
+        savePrefs();
+      },
     }, s.label)),
   );
 
@@ -194,7 +257,7 @@ async function buildView(root) {
   );
   const speedField = el('div', { class: 'field mt-md' },
     el('label', { for: 'tts-speed' }, 'Speaking pace ',
-      el('span', { class: 'muted' }, '(Coqui local; many upstream TTS providers honor it too)')),
+      el('span', { class: 'muted' }, '(local Coqui + Supertonic honor it; many upstream TTS providers do too)')),
     el('div', { class: 'inline', style: { gap: '10px' } }, speedSlider, speedVal, speedResetBtn),
     speedHint,
   );
@@ -204,6 +267,63 @@ async function buildView(root) {
     speedField.style.display = '';
   }
   updateSpeedVisibility();
+
+  // ---- Supertonic language picker (only visible for supertonic/* models) -
+  const langSel = el('select', {
+    id: 'tts-supertonic-lang',
+    onchange: (e) => { state.supertonicLang = e.target.value; savePrefs(); },
+  });
+  const langField = el('div', { class: 'field mt-md', style: { display: 'none' } },
+    el('label', { for: 'tts-supertonic-lang' }, 'Language ',
+      el('span', { class: 'muted' }, '(Supertonic — 31 supported)')),
+    langSel,
+    el('div', { class: 'hint' },
+      'Same voice can speak any of the 31 supported languages. ',
+      'Default follows your browser locale.',
+    ),
+  );
+
+  let _supertonicLangsLoaded = false;
+  // The Supertonic language list is small (31 entries) and never changes per
+  // session. Fetch once on panel mount so the dropdown is ready before the
+  // first click on Speak. updateLangVisibility just shows/hides.
+  async function ensureSupertonicLanguages() {
+    if (_supertonicLangsLoaded) return;
+    try {
+      const r = await apiGet('/api/idn-tts/supertonic/languages');
+      const langs = (r.languages || []);
+      langSel.innerHTML = '';
+      // Pick a sensible default: persisted pref → browser locale prefix → 'en'
+      const browserLang = (navigator.language || 'en').slice(0, 2).toLowerCase();
+      const stickyDefault = state.supertonicLang
+        || (langs.some(l => l.code === browserLang) ? browserLang : 'en');
+      for (const l of langs) {
+        const o = document.createElement('option');
+        o.value = l.code;
+        o.textContent = `${l.code} — ${l.label}`;
+        if (l.code === stickyDefault) o.selected = true;
+        langSel.appendChild(o);
+      }
+      state.supertonicLang = stickyDefault;
+      savePrefs();
+      _supertonicLangsLoaded = true;
+    } catch (e) {
+      // service down or SDK missing — show one fallback option
+      langSel.innerHTML = '<option value="en">en — English</option>';
+      state.supertonicLang = 'en';
+      _supertonicLangsLoaded = true;  // don't keep retrying on every change
+    }
+  }
+  // Eager prefetch — prevents the "empty <select>, click Speak fast" race.
+  ensureSupertonicLanguages();
+
+  function updateLangVisibility() {
+    const isSuper = (state.model || '').startsWith('supertonic/');
+    langField.style.display = isSuper ? '' : 'none';
+    if (isSuper) ensureSupertonicLanguages();
+  }
+  // Refresh visibility when the model dropdown changes
+  modelSel.addEventListener('change', updateLangVisibility);
 
   root.append(el('div', { class: 'card' },
     el('div', { class: 'grid cols-2' },
@@ -225,6 +345,7 @@ async function buildView(root) {
       sampleRow,
     ),
     speedField,
+    langField,
     el('div', { class: 'btn-row mt-md' }, goBtn, status),
   ));
 
@@ -233,6 +354,7 @@ async function buildView(root) {
   root.append(list);
 
   renderCoquiHint();
+  updateLangVisibility();
   await refreshVoices();
   await reloadList();
 
@@ -268,6 +390,13 @@ async function buildView(root) {
     try {
       const payload = { model: state.model, input: state.text.trim() };
       if (state.voice) payload.voice = state.voice;
+      // Supertonic also wants a language (31 supported); default 'en'.
+      // Wait for the language dropdown to populate so we don't accidentally
+      // ship 'en' when the user actually picked another locale via select.
+      if ((state.model || '').startsWith('supertonic/')) {
+        await ensureSupertonicLanguages();
+        payload.language = state.supertonicLang || 'en';
+      }
       // Speed: forward to both coqui (local) and upstream TTS — upstream
       // providers that don't honor the field ignore it.
       if (state.speed && state.speed !== 1.0) payload.speed = state.speed;
@@ -410,4 +539,45 @@ function renderIdnCard(idn) {
       ),
     ),
   );
+}
+
+function renderSupertonicCard(info, onRequestLoad) {
+  if (!info) return null;
+  if (!info.enabled) {
+    // SDK not installed in idn-tts env. Surface only if it could be helpful.
+    return null;  // hide silently — not all users want this
+  }
+  const voices = info.voices || [];
+  const loaded = !!info.loaded;
+  const loading = !!info.loading;
+  const error = info.error;
+
+  const card = el('div', { class: 'audio-waveform-card mt-sm' },
+    el('div', { class: 'inline', style: { alignItems: 'center', gap: '14px' } },
+      el('div', { class: 'voice-icon', title: 'supertonic' }, 'ST'),
+      el('div', { style: { flex: 1 } },
+        el('div', { class: 'inline', style: { gap: '8px' } },
+          el('span', { class: 'indicator-dot ' + (error ? 'bad' : (loaded ? 'good' : (loading ? 'warn' : ''))) }),
+          el('strong', { style: { color: 'var(--ink)' } },
+            error ? 'Supertonic failed to load'
+                  : (loaded ? 'Supertonic ready'
+                            : (loading ? 'Supertonic loading…'
+                                       : 'Supertonic available'))),
+          el('span', { class: 'badge-uppercase accent' }, 'on-device · 31 langs'),
+        ),
+        el('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
+          loaded
+            ? `${voices.length} voices · ${info.device || 'cpu'} · 24 kHz · audio stays on this machine`
+            : '260 MB on first use · downloads from HuggingFace · audio stays on this machine',
+        ),
+        error ? el('div', { class: 'mono mt-xs', style: { fontSize: '11px', color: 'var(--bad)' } },
+          String(error).slice(0, 240)) : null,
+      ),
+      (!loaded && !loading && !error) ? el('button', {
+        class: 'btn btn-small',
+        onclick: () => onRequestLoad && onRequestLoad(),
+      }, 'load now') : null,
+    ),
+  );
+  return card;
 }

@@ -90,8 +90,43 @@ echo
 
 # Forward all flags (--dry-run / --force / --verbose / --no-deps / --no-conflicts)
 # to the upstream bootstrap script.
-exec bash "$GRAND_SKILLS_REPO/scripts/bootstrap.sh" \
+bash "$GRAND_SKILLS_REPO/scripts/bootstrap.sh" \
   --project-root "$PROJECT_ROOT" \
   --dest "$DEST" \
   --profile "$PROFILE" \
   "$@"
+
+# ---------------------------------------------------------------------------
+# Extra step: fetch 9Router gateway skills.
+#
+# These are not part of my-grand-project-skills — they live alongside the
+# 9Router source at github.com/decolua/9router/skills/. They give AI agents
+# the right context for the gateway endpoints this dashboard sits on top of.
+# ---------------------------------------------------------------------------
+NINEROUTER_SKILLS_REPO="${NINEROUTER_SKILLS_REPO:-${HOME}/AI/9router-skills-source}"
+
+if [[ -d "$NINEROUTER_SKILLS_REPO/skills" ]]; then
+  echo ""
+  echo "[install-skills] copying 9router skills from $NINEROUTER_SKILLS_REPO/skills/..."
+  for src in "$NINEROUTER_SKILLS_REPO/skills/"*/; do
+    name="$(basename "$src")"
+    [[ "$name" == "README.md" ]] && continue
+    if [[ ! -d "$DEST/$name" ]]; then
+      cp -r "$src" "$DEST/$name"
+      echo "  + $name"
+    fi
+  done
+else
+  cat <<EOF
+
+[install-skills] note: 9Router skills not fetched.
+  Optional context wrappers describing the 9Router gateway endpoints.
+  To pull them, clone the 9Router repo and re-run:
+
+    git clone https://github.com/decolua/9router.git \\
+        "\$HOME/AI/9router-skills-source"
+    bash scripts/install-skills.sh
+
+  Override the path with NINEROUTER_SKILLS_REPO=/path/to/clone.
+EOF
+fi

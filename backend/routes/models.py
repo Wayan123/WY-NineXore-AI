@@ -33,6 +33,53 @@ async def _coqui_tts_entries(idn: IdnTTSClient) -> list[dict]:
     return entries
 
 
+async def _supertonic_tts_entries(idn: IdnTTSClient) -> list[dict]:
+    """Return one model entry per Supertonic voice (10 stock voices on first load,
+    plus any user-supplied JSON discovered on disk after warm-up).
+    """
+    try:
+        catalog = await idn.supertonic_voices()
+    except Exception:
+        catalog = {}
+    if not catalog or not catalog.get("enabled"):
+        return []
+    voices = catalog.get("voices") or []
+    languages = []  # filled below from /supertonic/languages
+    try:
+        lang_resp = await idn.supertonic_languages()
+        languages = [l.get("code") for l in (lang_resp.get("languages") or []) if l.get("code")]
+    except Exception:
+        languages = []
+    loaded = bool(catalog.get("loaded"))
+    loading = bool(catalog.get("loading"))
+    error = catalog.get("error")
+    device = catalog.get("device")
+    voices_source = catalog.get("voices_source", "default")
+    entries: list[dict] = []
+    for v in voices:
+        name = v.get("name")
+        if not name:
+            continue
+        entries.append({
+            "id": f"supertonic/{name}",
+            "object": "model",
+            "owned_by": "local",
+            "kind": "tts",
+            "provider": "supertonic (local)",
+            "voice_family": v.get("family", "custom"),
+            "voice_source": voices_source,
+            "languages": languages,
+            "default_language": "en",
+            "sample_rate": catalog.get("sample_rate", 24000),
+            "size_gb": 0.26,
+            "loaded": loaded,
+            "loading": loading,
+            "error": error,
+            "device": device,
+        })
+    return entries
+
+
 async def _local_whisper_entries(idn: IdnTTSClient) -> list[dict]:
     """Return one model entry per Whisper variant exposed by the local service."""
     try:
@@ -75,7 +122,11 @@ async def list_by_kind(
     resp = await client.list_models(None if kind == "chat" else kind)
     if kind == "tts":
         resp = dict(resp)
-        resp["data"] = list(resp.get("data") or []) + await _coqui_tts_entries(idn)
+        resp["data"] = (
+            await _supertonic_tts_entries(idn)
+            + await _coqui_tts_entries(idn)
+            + list(resp.get("data") or [])
+        )
     elif kind == "stt":
         resp = dict(resp)
         resp["data"] = await _local_whisper_entries(idn) + list(resp.get("data") or [])
@@ -162,14 +213,20 @@ async def list_all(
     kinds = [None, "image", "tts", "stt", "embedding", "web", "image-to-text"]
     results = await asyncio.gather(*[safe(k) for k in kinds])
     coqui_entries = await _coqui_tts_entries(idn)
+    supertonic_entries = await _supertonic_tts_entries(idn)
     whisper_entries = await _local_whisper_entries(idn)
 
     out: dict[str, dict] = {}
     for kind, payload in zip(kinds, results):
         key = kind or "chat"
-        if key == "tts" and coqui_entries:
+        if key == "tts" and (coqui_entries or supertonic_entries):
             payload = dict(payload)
-            payload["data"] = list(payload.get("data") or []) + coqui_entries
+            # Same ordering as list_by_kind: supertonic → coqui → upstream.
+            payload["data"] = (
+                supertonic_entries
+                + coqui_entries
+                + list(payload.get("data") or [])
+            )
         elif key == "stt" and whisper_entries:
             payload = dict(payload)
             payload["data"] = whisper_entries + list(payload.get("data") or [])

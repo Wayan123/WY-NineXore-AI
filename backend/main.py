@@ -129,6 +129,7 @@ async def idn_tts_status(request: Request) -> dict:
         "named_speakers": [s for s in speakers if s in {"wibowo", "ardi", "gadis"}],
         "default_speaker": default,
         "whisper": h.get("whisper") or {"enabled": False},
+        "supertonic": h.get("supertonic") or {"enabled": False},
     }
 
 
@@ -151,6 +152,41 @@ async def idn_tts_whisper_load(
         if isinstance(e, IdnTTSError):
             raise
         raise HTTPException(502, f"whisper/load upstream error: {e}")
+
+
+@app.get("/api/idn-tts/supertonic/voices")
+async def idn_tts_supertonic_voices(request: Request) -> dict:
+    """Catalogue of Supertonic voices on the local service. Empty when
+    the SDK is not installed or the service is unreachable.
+    """
+    idn = request.app.state.idn_tts
+    if not idn.enabled:
+        return {"enabled": False, "voices": [], "reachable": False}
+    return await idn.supertonic_voices() or {"enabled": False, "voices": [], "reachable": False}
+
+
+@app.get("/api/idn-tts/supertonic/languages")
+async def idn_tts_supertonic_languages(request: Request) -> dict:
+    """31-language list (ISO-639-1 codes + English labels)."""
+    idn = request.app.state.idn_tts
+    if not idn.enabled:
+        return {"languages": []}
+    return await idn.supertonic_languages() or {"languages": []}
+
+
+@app.post("/api/idn-tts/supertonic/load")
+async def idn_tts_supertonic_load(request: Request) -> dict:
+    """Kick off a background load of the 260 MB Supertonic bundle."""
+    idn = request.app.state.idn_tts
+    if not idn.enabled:
+        raise HTTPException(503, "local ML service disabled")
+    try:
+        return await idn.supertonic_load()
+    except Exception as e:
+        from .idn_tts import IdnTTSError
+        if isinstance(e, IdnTTSError):
+            raise
+        raise HTTPException(502, f"supertonic/load upstream error: {e}")
 
 
 # --------------------------------------------------------------------- routers

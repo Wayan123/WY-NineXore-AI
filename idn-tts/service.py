@@ -35,6 +35,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+import supertonic_tts  # local module
+
 log = logging.getLogger("idn-tts")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
@@ -491,6 +493,7 @@ def health() -> dict:
             "default_variant": _default_whisper_variant(),
             "variants": variants,
         },
+        "supertonic": supertonic_tts.state.to_health(),
     }
 
 
@@ -682,6 +685,94 @@ async def openai_transcriptions(
             "segments": result.get("segments", []),
         }
     return {"text": result["text"]}
+
+
+# ---------------------------------------------------------------------------
+# Supertonic TTS endpoints (on-device, 31 languages)
+# ---------------------------------------------------------------------------
+
+@app.get("/supertonic/voices")
+def supertonic_voices() -> dict:
+    """Return the catalogue of Supertonic voice styles + per-voice status."""
+    s = supertonic_tts.state
+    return {
+        "enabled": s.enabled,
+        "loaded": s.loaded,
+        "loading": s.loading,
+        "error": s.error,
+        "device": s.device,
+        "voices_source": s.voices_source,
+        "voices": supertonic_tts.list_voices(),
+        "sample_rate": supertonic_tts.SAMPLE_RATE,
+    }
+
+
+@app.get("/supertonic/languages")
+def supertonic_languages() -> dict:
+    """Return the 31 ISO-639-1 codes Supertonic supports."""
+    return {
+        "default": supertonic_tts.DEFAULT_LANGUAGE,
+        "languages": supertonic_tts.list_languages(),
+    }
+
+
+@app.post("/supertonic/load")
+def supertonic_load() -> dict:
+    """Kick off a background load of the Supertonic model. Returns fast.
+    Subsequent calls while loading are no-ops; poll /health for progress.
+    """
+    if not supertonic_tts.is_enabled():
+        raise HTTPException(503, "supertonic SDK not installed")
+    supertonic_tts.kick_off()
+    s = supertonic_tts.state
+    return {
+        "started": True,
+        "loaded": s.loaded,
+        "loading": s.loading,
+        "error": s.error,
+    }
+
+
+@app.post("/supertonic/speak")
+def supertonic_speak(
+    text: str = Form(...),
+    voice: str = Form("M1"),
+    language: str = Form(supertonic_tts.DEFAULT_LANGUAGE),
+    speed: float = Form(1.05),
+    total_steps: int = Form(5),
+) -> Response:
+    """Synthesise speech with Supertonic. Returns raw audio/wav bytes.
+    First call may block for ~30-90 s while the 260 MB bundle downloads.
+    """
+    if not supertonic_tts.is_enabled():
+        raise HTTPException(503, "supertonic SDK not installed")
+    text = (text or "").strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+    if speed < 0.5 or speed > 2.5:
+        raise HTTPException(400, "speed must be between 0.5 and 2.5")
+
+    try:
+        audio_bytes, meta = supertonic_tts.synthesize(
+            text,
+            voice=voice,
+            language=language,
+            speed=float(speed),
+            total_steps=int(total_steps),
+        )
+    except ValueError as e:
+        # unknown voice / language — helpful 400
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+    headers = {
+        "X-Supertonic-Voice": meta["voice"],
+        "X-Supertonic-Language": meta["language"],
+        "X-Supertonic-Sample-Rate": str(meta["sample_rate"]),
+        "X-Supertonic-Duration-S": f"{meta['duration_s']:.3f}",
+    }
+    return Response(content=audio_bytes, media_type="audio/wav", headers=headers)
 
 
 @app.exception_handler(Exception)

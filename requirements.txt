@@ -21,14 +21,32 @@ pydantic-settings>=2.3
 python-multipart>=0.0.9
 python-dotenv>=1.0
 
-# --- Local ML service (Coqui TTS + Whisper STT) -----------------------------
+# --- Local ML service (Coqui TTS + Whisper STT + Supertonic TTS) -----------
 coqui-tts>=0.27
 g2p-id==0.0.4
 transformers>=4.40
 accelerate>=0.30
 soundfile>=0.12
 librosa>=0.10
-numpy
+# numpy 2.x is required by scipy>=1.13 which coqui-tts pulls in. Supertonic
+# claims it needs <2.0 but works fine at runtime with numpy 2.2.
+numpy>=2.0,<2.3
+scipy>=1.13
+onnxruntime>=1.18
+huggingface-hub>=0.10
+
+# --- Supertonic TTS (on-device, 31 langs) ----------------------------------
+#
+# Supertonic 1.2 publishes a stale `numpy<2.0` constraint that contradicts
+# the rest of this stack. Install it with --no-deps to skip its pin and let
+# the explicit deps above provide its real dependencies (numpy / soundfile /
+# onnxruntime / huggingface-hub).
+#
+#   pip install -r requirements.txt
+#   pip install --no-deps 'supertonic>=1.2,<2'
+#
+# scripts/install-deps.sh wraps both steps. The 260 MB ONNX bundle is then
+# downloaded from HuggingFace on first synth.
 
 # --- Dev / test -------------------------------------------------------------
 pytest>=8.0

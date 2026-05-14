@@ -1,6 +1,6 @@
 # WY NineXore AI
 
-A dark-canvas developer console for the [9Router](https://github.com/decolua/9router) AI gateway, plus a small local CUDA service that adds Bahasa Indonesia TTS and offline Whisper transcription.
+A dark-canvas developer console for the [9Router](https://github.com/decolua/9router) AI gateway, plus a small local CUDA service that adds **Bahasa Indonesia TTS (Coqui, 83 voices)**, **on-device 31-language TTS (Supertonic)**, and **offline Whisper transcription**.
 
 One window covers every 9Router capability — chat, image generation, text-to-speech, speech-to-text, embeddings, web search, URL fetching — and an image-to-text (Vision / OCR) panel that extracts text from images via multimodal chat.
 
@@ -23,7 +23,7 @@ Every panel renders on a dark canvas with a single lavender accent. Click any th
 | | | |
 |:--:|:--:|:--:|
 | ![Chat](docs/assets/chat.jpg)         | ![Speak (TTS)](docs/assets/tts.jpg)          | ![Transcribe (STT)](docs/assets/stt.jpg)         |
-| **Chat** — streaming, sessions, markdown | **Speak** — Coqui Indonesian TTS + speed slider | **Transcribe** — offline Whisper large-v3 |
+| **Chat** — streaming, sessions, markdown | **Speak** — Coqui (id) + Supertonic (31 langs) + speed slider | **Transcribe** — offline Whisper large-v3 |
 | ![Vision / OCR](docs/assets/vision.jpg) | ![Image](docs/assets/image.jpg)            | ![Embeddings](docs/assets/embed.jpg) |
 | **Vision / OCR** — multimodal extraction  | **Image** — text → image via Codex            | **Embeddings** — cosine similarity matrix |
 | ![Search](docs/assets/search.jpg)       | ![Read URL](docs/assets/fetch.jpg)         | ![Models](docs/assets/models.jpg) |
@@ -129,6 +129,7 @@ Runs in your own `torch-gpu` env via the `idn-tts/` service in this repo.
 | Model | Panel | Notes |
 |---|---|---|
 | **Coqui VITS** (Wikidepia/indonesian-tts v1.2) | **Speak (TTS)** | 83 Bahasa voices (`coqui/wibowo`, `coqui/ardi`, `coqui/gadis` + 80 regional) |
+| **Supertonic 3** (Supertone/supertonic-3, ONNX) | **Speak (TTS)** | 10 stock voices (`M1`–`M5`, `F1`–`F5`) covering **31 languages** including `id`, `en`, `ja`, `ko`, `vi`, `fr`, `de`, `es`, `ar`. Audio stays on the laptop. ~260 MB download on first synth. |
 | **openai/whisper-large-v3** (HuggingFace local) | **Transcribe (STT)** | `local/whisper-large-v3`, loaded lazily on first request |
 
 Your audio never leaves the machine.
@@ -162,7 +163,7 @@ One env hosts both the dashboard and the local ML service:
 conda create -n torch-gpu python=3.10 -y
 conda activate torch-gpu
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128  # adjust cuXXX
-pip install -r requirements.txt
+bash scripts/install-deps.sh   # wraps requirements.txt + supertonic --no-deps
 ```
 
 Using a different env name? `CONDA_ENV=my-env ./run.sh`.
@@ -462,6 +463,7 @@ reasoning behind each pick.
 - [9Router](https://github.com/decolua/9router) by decolua — the gateway this project sits on top of.
 - [Wikidepia/indonesian-tts](https://github.com/Wikidepia/indonesian-tts) — Coqui VITS fine-tune for Bahasa Indonesia.
 - [g2p-id](https://github.com/Wikidepia/g2p-id) — grapheme → phoneme conversion for Bahasa.
+- [Supertonic](https://github.com/supertone-inc/supertonic) by Supertone — on-device 31-language TTS (ONNX).
 - [OpenAI Whisper](https://huggingface.co/openai/whisper-large-v3) — STT model.
 - Design language adapted from [VoltAgent/awesome-design-md](https://github.com/VoltAgent/awesome-design-md) (Linear + ElevenLabs patterns). See [`DESIGN.md`](./DESIGN.md).
 
