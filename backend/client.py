@@ -93,6 +93,43 @@ class NineRouterClient:
                 return resp.json()
             except Exception:
                 pass
+        # 9Router (and a couple of upstreams) sometimes return text/event-stream
+        # for a non-stream call: a JSON object followed by 'data: [DONE]'. Strip
+        # the SSE trailer and re-parse so callers get real JSON, not {"raw": ...}.
+        # The boundary may be 'X\ndata:' (well-formed SSE) or just '}data:' /
+        # ']data:' when the upstream forgets the newline (we've seen both).
+        if stripped.startswith("{") or stripped.startswith("["):
+            import re as _re
+            m = _re.search(r"(?<=[}\]])\s*data:\s*\[DONE\]", stripped)
+            if m:
+                head = stripped[:m.start()].rstrip()
+                try:
+                    import json as _json
+                    return _json.loads(head)
+                except Exception:
+                    pass
+            # Last resort: walk the SSE 'data:' lines and concatenate the
+            # JSON deltas. Useful when the upstream really did stream.
+            try:
+                import json as _json
+                pieces: list[Any] = []
+                for line in stripped.splitlines():
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    payload = line[len("data:"):].strip()
+                    if not payload or payload == "[DONE]":
+                        continue
+                    try:
+                        pieces.append(_json.loads(payload))
+                    except Exception:
+                        continue
+                if len(pieces) == 1:
+                    return pieces[0]
+                if pieces:
+                    return {"data": pieces}
+            except Exception:
+                pass
         return {"raw": text}
 
     # --------------------------------------------------------------- discovery

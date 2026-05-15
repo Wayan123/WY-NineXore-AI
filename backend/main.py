@@ -33,7 +33,7 @@ from fastapi.staticfiles import StaticFiles
 from .client import NineRouterClient, NineRouterError
 from .config import Settings, get_settings
 from .idn_tts import IdnTTSClient, IdnTTSError
-from .routes import chat, embeddings, fetch, history, image, models, search, stt, tts, vision
+from .routes import chat, embeddings, fetch, history, image, models, search, stt, tts, video, vision
 from .routes.deps import get_client, get_settings_dep
 from .storage.db import HistoryStore
 
@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     app.state.client = NineRouterClient(settings)
     app.state.idn_tts = IdnTTSClient(settings)
     app.state.store = HistoryStore(settings.db_path)
+    video.install(app, settings)
     log.info(
         "ready. upstream=%s data=%s idn_tts=%s",
         settings.nineroute_url, settings.data_path,
@@ -200,6 +201,7 @@ app.include_router(search.router)
 app.include_router(fetch.router)
 app.include_router(history.router)
 app.include_router(vision.router)
+app.include_router(video.router)
 
 
 # ---------------------------------------------------------- global error shape

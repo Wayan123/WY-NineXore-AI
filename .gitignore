@@ -24,6 +24,7 @@ secrets/
 data/history.db
 data/history.db-journal
 data/outputs/*
+data/video/
 !data/outputs/.gitkeep
 
 # ----- Model weights (too large for git; user downloads via download.sh) ----

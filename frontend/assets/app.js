@@ -14,6 +14,7 @@ const VIEWS = {
   embed:    () => import('./components/embed.js'),
   search:   () => import('./components/search.js'),
   fetch:    () => import('./components/fetch.js'),
+  video:    () => import('./components/video.js'),
   models:   () => import('./components/models.js'),
   history:  () => import('./components/history.js'),
   help:     () => import('./components/help.js'),
@@ -170,6 +171,7 @@ setInterval(refreshUpstream, 30_000);
 // ---- keyboard shortcuts ----------------------------------------------------
 const NAV_MAP = { h: 'home', c: 'chat', i: 'image', t: 'tts', r: 'stt',
                   v: 'vision', e: 'embed', s: 'search', f: 'fetch',
+                  o: 'video',
                   m: 'models', y: 'history', '?': 'help', ',': 'settings' };
 
 function isTypingTarget(target) {

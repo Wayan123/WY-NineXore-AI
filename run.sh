@@ -68,6 +68,17 @@ if ! curl -sf -m 3 "$NR_URL/api/health" >/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
+# 4b. Probe ffmpeg (non-fatal). Required only by the Video Studio panel.
+# ---------------------------------------------------------------------------
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo "⚠  ffmpeg not on PATH. Video Studio (/api/video) will refuse jobs."
+  echo "   install it with:"
+  echo "     ubuntu/debian:  sudo apt install ffmpeg"
+  echo "     macos/homebrew: brew install ffmpeg"
+  echo "   the rest of the dashboard works without it."
+fi
+
+# ---------------------------------------------------------------------------
 # 5. Ensure data dirs + output folders
 # ---------------------------------------------------------------------------
 mkdir -p "${DATA_DIR:-./data}/outputs"
