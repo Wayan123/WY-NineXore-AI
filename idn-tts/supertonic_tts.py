@@ -52,6 +52,129 @@ DEFAULT_VOICES: tuple[str, ...] = (
     "F1", "F2", "F3", "F4", "F5",
 )
 
+# Bilingual voice descriptions, sourced from the official Supertonic 3
+# voice guide (https://supertone-inc.github.io/supertonic-py/voices/).
+#
+# Each entry has:
+#   gender   : "male" | "female"          (always English, used as a key)
+#   en       : { description, use_cases } in English
+#   id       : { description, use_cases } in Indonesian
+#
+# Custom voice styles loaded from JSON via tts.get_voice_style_from_path()
+# fall back to a generic "custom" descriptor in list_voices().
+VOICE_PROFILES: dict[str, dict] = {
+    "M1": {
+        "gender": "male",
+        "en": {
+            "description": "Lively, upbeat male voice with confident energy and a standard, clear tone.",
+            "use_cases": "Promotional videos, upbeat explainers, general-purpose narration, casual announcements.",
+        },
+        "id": {
+            "description": "Suara pria lincah dan bersemangat dengan energi percaya diri dan nada jernih standar.",
+            "use_cases": "Video promosi, explainer ceria, narasi serbaguna, pengumuman santai.",
+        },
+    },
+    "M2": {
+        "gender": "male",
+        "en": {
+            "description": "Deep, robust male voice; calm, composed, and serious with a grounded presence.",
+            "use_cases": "Corporate content, serious announcements, documentaries, formal guidance.",
+        },
+        "id": {
+            "description": "Suara pria dalam dan kokoh; tenang, mantap, dan serius dengan kehadiran yang membumi.",
+            "use_cases": "Konten korporat, pengumuman serius, dokumenter, panduan formal.",
+        },
+    },
+    "M3": {
+        "gender": "male",
+        "en": {
+            "description": "Polished, authoritative male voice; confident and trustworthy with strong presentation quality.",
+            "use_cases": "Business presentations, leadership messages, investor briefings, high-trust narration.",
+        },
+        "id": {
+            "description": "Suara pria berwibawa dan terlatih; percaya diri dan terpercaya dengan kualitas presentasi yang kuat.",
+            "use_cases": "Presentasi bisnis, pesan kepemimpinan, briefing investor, narasi yang menuntut kredibilitas tinggi.",
+        },
+    },
+    "M4": {
+        "gender": "male",
+        "en": {
+            "description": "Soft, neutral-toned male voice; gentle and approachable with a youthful, friendly quality.",
+            "use_cases": "Educational content, friendly explainers, onboarding guides, youth-oriented narration.",
+        },
+        "id": {
+            "description": "Suara pria lembut bernada netral; halus dan ramah dengan nuansa muda dan akrab.",
+            "use_cases": "Konten edukasi, explainer ramah, panduan onboarding, narasi untuk audiens muda.",
+        },
+    },
+    "M5": {
+        "gender": "male",
+        "en": {
+            "description": "Warm, soft-spoken male voice; calm and soothing with a natural storytelling quality.",
+            "use_cases": "Audiobooks, relaxation content, bedtime stories, reflective or emotional narration.",
+        },
+        "id": {
+            "description": "Suara pria hangat dan lembut; tenang dan menenangkan dengan nuansa pencerita alami.",
+            "use_cases": "Audiobook, konten relaksasi, cerita pengantar tidur, narasi reflektif atau emosional.",
+        },
+    },
+    "F1": {
+        "gender": "female",
+        "en": {
+            "description": "Calm female voice with a slightly low tone; steady and composed.",
+            "use_cases": "Customer service, guided instructions, meditative content, professional narration.",
+        },
+        "id": {
+            "description": "Suara wanita tenang dengan nada sedikit rendah; stabil dan mantap.",
+            "use_cases": "Layanan pelanggan, instruksi terpandu, konten meditatif, narasi profesional.",
+        },
+    },
+    "F2": {
+        "gender": "female",
+        "en": {
+            "description": "Bright, cheerful female voice; lively, playful, and youthful with spirited energy.",
+            "use_cases": "Youth content, playful ads, social media videos, character voices.",
+        },
+        "id": {
+            "description": "Suara wanita cerah dan ceria; lincah, ceria, dan muda dengan energi penuh semangat.",
+            "use_cases": "Konten remaja, iklan ceria, video media sosial, suara karakter.",
+        },
+    },
+    "F3": {
+        "gender": "female",
+        "en": {
+            "description": "Clear, professional announcer-style female voice; articulate and broadcast-ready.",
+            "use_cases": "Commercials, documentaries, news-style narration, formal presentations.",
+        },
+        "id": {
+            "description": "Suara wanita jernih dengan gaya penyiar profesional; artikulasi tajam dan siap tayang.",
+            "use_cases": "Iklan, dokumenter, narasi gaya berita, presentasi formal.",
+        },
+    },
+    "F4": {
+        "gender": "female",
+        "en": {
+            "description": "Crisp, confident female voice; distinct and expressive with strong delivery.",
+            "use_cases": "Business explainers, training videos, pitch decks, product announcements.",
+        },
+        "id": {
+            "description": "Suara wanita tegas dan percaya diri; khas dan ekspresif dengan penyampaian yang kuat.",
+            "use_cases": "Explainer bisnis, video pelatihan, pitch deck, pengumuman produk.",
+        },
+    },
+    "F5": {
+        "gender": "female",
+        "en": {
+            "description": "Kind, gentle female voice; soft-spoken, calm, and naturally soothing.",
+            "use_cases": "Audiobooks, supportive messages, wellness content, empathetic narration.",
+        },
+        "id": {
+            "description": "Suara wanita lembut dan ramah; halus, tenang, dan menenangkan secara alami.",
+            "use_cases": "Audiobook, pesan dukungan, konten kesehatan, narasi empatik.",
+        },
+    },
+}
+
 # 31 supported language codes. The single trailing 'na' code returned by
 # `supertonic.SUPPORTED_LANGUAGES` is the unknown-language sentinel and
 # is intentionally excluded from the user-facing dropdown.
@@ -74,6 +197,22 @@ LANGUAGE_LABELS: dict[str, str] = {
     "ru": "Russian",        "sk": "Slovak",      "sl": "Slovenian",
     "sv": "Swedish",        "tr": "Turkish",     "uk": "Ukrainian",
     "vi": "Vietnamese",
+}
+
+# Indonesian-language labels for the 31 supported languages, used by the
+# bilingual UI when the user picks Indonesian as their interface language.
+LANGUAGE_LABELS_ID: dict[str, str] = {
+    "en": "Inggris",        "ko": "Korea",       "ja": "Jepang",
+    "ar": "Arab",           "bg": "Bulgaria",    "cs": "Ceko",
+    "da": "Denmark",        "de": "Jerman",      "el": "Yunani",
+    "es": "Spanyol",        "et": "Estonia",     "fi": "Finlandia",
+    "fr": "Prancis",        "hi": "Hindi",       "hr": "Kroasia",
+    "hu": "Hungaria",       "id": "Indonesia",   "it": "Italia",
+    "lt": "Lithuania",      "lv": "Latvia",      "nl": "Belanda",
+    "pl": "Polandia",       "pt": "Portugis",    "ro": "Rumania",
+    "ru": "Rusia",          "sk": "Slovakia",    "sl": "Slovenia",
+    "sv": "Swedia",         "tr": "Turki",       "uk": "Ukraina",
+    "vi": "Vietnam",
 }
 
 DEFAULT_LANGUAGE = "en"
@@ -217,22 +356,54 @@ def kick_off() -> None:
 
 
 def list_voices() -> list[dict]:
-    """Return the catalogue of voices, with status hints."""
+    """Return the catalogue of voices, with bilingual descriptions.
+
+    Each row carries the gender + EN/ID descriptions when known. Voices
+    not in VOICE_PROFILES (e.g. user-supplied custom styles) get a
+    generic "custom" descriptor so the dashboard never renders blank.
+    """
     rows = []
     for name in state.voices:
         family = "M" if name.startswith("M") else ("F" if name.startswith("F") else "custom")
+        profile = VOICE_PROFILES.get(name)
+        if profile is None:
+            profile = {
+                "gender": "custom",
+                "en": {
+                    "description": "Custom voice style.",
+                    "use_cases": "User-supplied voice loaded from a JSON style file.",
+                },
+                "id": {
+                    "description": "Style suara kustom.",
+                    "use_cases": "Suara kustom yang dimuat dari file JSON pengguna.",
+                },
+            }
         rows.append({
             "name": name,
             "family": family,
+            "gender": profile["gender"],
             "source": state.voices_source,
+            "description": {
+                "en": profile["en"]["description"],
+                "id": profile["id"]["description"],
+            },
+            "use_cases": {
+                "en": profile["en"]["use_cases"],
+                "id": profile["id"]["use_cases"],
+            },
         })
     return rows
 
 
 def list_languages() -> list[dict]:
-    """Return the 31 supported languages with English labels."""
+    """Return the 31 supported languages with both EN and ID labels."""
     return [
-        {"code": c, "label": LANGUAGE_LABELS.get(c, c)}
+        {
+            "code": c,
+            "label": LANGUAGE_LABELS.get(c, c),       # back-compat: English label
+            "label_en": LANGUAGE_LABELS.get(c, c),
+            "label_id": LANGUAGE_LABELS_ID.get(c, LANGUAGE_LABELS.get(c, c)),
+        }
         for c in SUPPORTED_LANGUAGES
     ]
 

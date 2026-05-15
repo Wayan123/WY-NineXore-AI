@@ -2,6 +2,7 @@
 import { bootstrap, getState, onChange, refreshUpstream } from './store.js';
 import { $, $$, toast } from './ui.js';
 import { initTheme, currentMode, setMode, onThemeChange, resolvedTheme, THEME_MODES } from './theme.js';
+import { getLocale, setLocale, toggleLocale, onLocaleChange, t } from './i18n.js';
 
 const VIEWS = {
   home:     () => import('./components/home.js'),
@@ -112,6 +113,57 @@ if (_themeBtn) {
 }
 onThemeChange(renderThemeToggle);
 
+// ---- locale toggle (sidebar footer) ---------------------------------------
+function renderLocaleToggle() {
+  const btn = document.getElementById('localeToggle');
+  if (!btn) return;
+  const loc = getLocale();
+  const label = btn.querySelector('#localeToggleLabel');
+  if (label) label.textContent = loc;
+  btn.setAttribute('aria-label', t('app.locale.tooltip'));
+  btn.setAttribute('title', t('app.locale.tooltip') + ' — ' + loc.toUpperCase());
+}
+
+// Translate every element that carries a [data-i18n] attribute. Components
+// that build DOM after locale-change event (Help, TTS, etc.) will re-render
+// themselves via onLocaleChange; static chrome (sidebar nav, sidebar foot)
+// is handled here.
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach((node) => {
+    const key = node.getAttribute('data-i18n');
+    if (key) node.textContent = t(key);
+  });
+  // attribute-targeting variants for tooltip / placeholder
+  document.querySelectorAll('[data-i18n-title]').forEach((node) => {
+    const key = node.getAttribute('data-i18n-title');
+    if (key) node.setAttribute('title', t(key));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((node) => {
+    const key = node.getAttribute('data-i18n-placeholder');
+    if (key) node.setAttribute('placeholder', t(key));
+  });
+  // theme toggle tooltip uses i18n too
+  const themeBtn = document.getElementById('themeToggle');
+  if (themeBtn) themeBtn.setAttribute('title', t('app.theme.tooltip'));
+}
+
+const _localeBtn = document.getElementById('localeToggle');
+if (_localeBtn) {
+  _localeBtn.addEventListener('click', () => { toggleLocale(); });
+}
+onLocaleChange(() => {
+  applyStaticTranslations();
+  renderLocaleToggle();
+  // Force the currently mounted view to re-render so [data-i18n] strings
+  // inside it pick up the new locale. Each component persists its own
+  // form state to localStorage on input, so a remount only loses
+  // ephemeral UI bits like scroll position.
+  loaded.clear();
+  try {
+    showView(parseRoute());
+  } catch (_) {}
+});
+
 // Recheck every 30s unobtrusively.
 setInterval(refreshUpstream, 30_000);
 
@@ -151,6 +203,8 @@ document.addEventListener('keydown', (e) => {
 (async () => {
   initTheme();
   renderThemeToggle();
+  applyStaticTranslations();
+  renderLocaleToggle();
   await bootstrap();
   renderStatus();
 

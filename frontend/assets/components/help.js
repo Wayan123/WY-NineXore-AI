@@ -1,25 +1,37 @@
-// Help panel — in-app user manual. Bilingual-friendly where it makes sense
-// (Bahasa Indonesia labels next to English explanations) because the
-// primary audience runs Coqui Indonesian TTS and local Whisper on this.
+// Help panel — in-app user manual. Bilingual via the i18n module: page
+// head, TOC, and section headings translate when the user toggles ID/EN
+// in the sidebar. The Supertonic voice guide pulls bilingual descriptions
+// straight from /api/idn-tts/supertonic/voices and renders them in the
+// active locale.
 import { el } from '../ui.js';
+import { apiGet } from '../api.js';
+import { t, getLocale, pickLocale } from '../i18n.js';
 
+// Toc + section titles are derived from i18n keys so they stay in sync
+// with the locale toggle. Body text inside each section deliberately
+// stays mixed (Bahasa labels next to English explanations) since most
+// of it is technical reference — a full sentence-level translation
+// would balloon this file beyond its weight class. The sections that
+// matter most for new users (overview, tts, supertonic-voices) are
+// fully bilingual.
 const TOC = [
-  { id: 'overview',     title: 'Overview — apa itu NineXore AI?' },
-  { id: 'architecture', title: 'Architecture — 2 proses lokal + 9Router' },
-  { id: 'chat',         title: 'Chat panel' },
-  { id: 'image',        title: 'Image panel' },
-  { id: 'tts',          title: 'Speak / TTS panel' },
-  { id: 'stt',          title: 'Transcribe / STT panel' },
-  { id: 'vision',       title: 'Vision / OCR panel' },
-  { id: 'embed',        title: 'Embeddings panel' },
-  { id: 'search',       title: 'Search panel' },
-  { id: 'fetch',        title: 'Read URL panel' },
-  { id: 'models',       title: 'Models explorer' },
-  { id: 'history',      title: 'History panel' },
-  { id: 'settings',     title: 'Settings panel' },
-  { id: 'shortcuts',    title: 'Keyboard shortcuts' },
-  { id: 'faq',          title: 'FAQ & troubleshooting' },
-  { id: 'links',        title: 'External references' },
+  { id: 'overview',         key: 'help.toc.overview' },
+  { id: 'architecture',     key: 'help.toc.architecture' },
+  { id: 'chat',             key: 'help.toc.chat' },
+  { id: 'image',            key: 'help.toc.image' },
+  { id: 'tts',              key: 'help.toc.tts' },
+  { id: 'supertonic-voices', key: 'help.toc.supertonicVoices' },
+  { id: 'stt',              key: 'help.toc.stt' },
+  { id: 'vision',           key: 'help.toc.vision' },
+  { id: 'embed',            key: 'help.toc.embed' },
+  { id: 'search',           key: 'help.toc.search' },
+  { id: 'fetch',            key: 'help.toc.fetch' },
+  { id: 'models',           key: 'help.toc.models' },
+  { id: 'history',          key: 'help.toc.history' },
+  { id: 'settings',         key: 'help.toc.settings' },
+  { id: 'shortcuts',        key: 'help.toc.shortcuts' },
+  { id: 'faq',              key: 'help.toc.faq' },
+  { id: 'links',            key: 'help.toc.links' },
 ];
 
 export async function mount(root) {
@@ -27,16 +39,15 @@ export async function mount(root) {
 
   root.append(el('div', { class: 'page-head' },
     el('div', {},
-      el('h2', {}, 'Help & user manual'),
-      el('p', { class: 'sub' },
-        'Panduan pemakaian setiap panel. Scroll, atau klik salah satu item di daftar isi.'),
+      el('h2', {}, t('help.title')),
+      el('p', { class: 'sub' }, t('help.subtitle')),
     ),
     el('div', { class: 'inline' },
       el('a', {
         class: 'btn btn-ghost btn-small',
         href: 'https://github.com/Wayan123/WY-NineXore-AI#readme',
         target: '_blank', rel: 'noopener',
-      }, 'Full README on GitHub ↗'),
+      }, t('help.readmeLink')),
     ),
   ));
 
@@ -60,7 +71,7 @@ export async function mount(root) {
       fontSize: '11px', fontWeight: 600, letterSpacing: '1.1px',
       textTransform: 'uppercase', color: 'var(--ink-tertiary)', marginBottom: '8px',
     },
-  }, 'On this page'));
+  }, t('help.toc')));
   for (const item of TOC) {
     toc.append(el('a', {
       href: '#/help#' + item.id,
@@ -74,10 +85,10 @@ export async function mount(root) {
       onmouseout:  (e) => e.target.style.color = 'var(--ink-subtle)',
       onclick: (e) => {
         e.preventDefault();
-        const t = document.getElementById('help-' + item.id);
-        if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const target = document.getElementById('help-' + item.id);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       },
-    }, item.title));
+    }, t(item.key)));
   }
   layout.append(toc);
 
@@ -86,12 +97,73 @@ export async function mount(root) {
   layout.append(content);
 
   for (const fn of [
-    overview, architecture, chatHelp, imageHelp, ttsHelp, sttHelp, visionHelp,
+    overview, architecture, chatHelp, imageHelp, ttsHelp, supertonicVoicesHelp, sttHelp, visionHelp,
     embedHelp, searchHelp, fetchHelp, modelsHelp, historyHelp, settingsHelp,
     shortcutsHelp, faqHelp, linksHelp,
   ]) {
     content.append(fn());
   }
+}
+
+// Hydrate the supertonic voices section after mount so we can fetch the
+// bilingual catalogue without blocking the initial render. Called lazily.
+async function hydrateSupertonicVoices() {
+  const host = document.getElementById('help-supertonic-voices-body');
+  if (!host) return;
+  let info = null;
+  try {
+    info = await apiGet('/api/idn-tts/supertonic/voices');
+  } catch (_) {}
+  const voices = (info && Array.isArray(info.voices) && info.voices.length)
+    ? info.voices
+    : null;
+  // Empty / unreachable — keep the fallback message that's already in the DOM.
+  if (!voices) return;
+  host.innerHTML = '';
+
+  // Group: male first, then female, then anything else.
+  const ordered = voices.slice().sort((a, b) => {
+    const order = { male: 0, female: 1, custom: 2 };
+    const ga = order[a.gender] ?? 3;
+    const gb = order[b.gender] ?? 3;
+    if (ga !== gb) return ga - gb;
+    return String(a.name).localeCompare(String(b.name));
+  });
+
+  for (const v of ordered) {
+    const desc = pickLocale(v.description);
+    const useCases = pickLocale(v.use_cases);
+    const genderKey = 'tts.voice.gender.' + (v.gender || 'custom');
+    host.append(el('div', {
+      style: {
+        display: 'grid',
+        gridTemplateColumns: '60px 1fr',
+        gap: '12px',
+        padding: '10px 0',
+        borderTop: '1px dashed var(--hairline)',
+      },
+    },
+      el('div', { style: { display: 'flex', alignItems: 'flex-start' } },
+        el('div', { class: 'voice-icon', style: { fontSize: '15px' } }, v.name),
+      ),
+      el('div', {},
+        el('div', { class: 'inline', style: { gap: '6px', alignItems: 'center', marginBottom: '4px' } },
+          el('strong', {}, v.name),
+          el('span', { class: 'badge-uppercase accent' }, t(genderKey)),
+        ),
+        el('div', { style: { color: 'var(--ink-muted)', fontSize: '13px' } }, desc),
+        useCases ? el('div', { class: 'muted', style: { fontSize: '12px', marginTop: '4px' } },
+          el('strong', {}, t('tts.voice.useCases') + ': '), useCases) : null,
+      ),
+    ));
+  }
+}
+
+// Schedule the hydration after the synchronous mount completes.
+if (typeof window !== 'undefined') {
+  Promise.resolve().then(() => {
+    setTimeout(hydrateSupertonicVoices, 0);
+  });
 }
 
 // ---------- section builders ------------------------------------------
@@ -210,6 +282,39 @@ function ttsHelp() {
       'Klik tombol ', code('load now'), ' di kartu Supertonic untuk pre-warm di background sebelum submit.'),
     callout('', 'Ingin suara Coqui tidak muncul?',
       'Normalnya ', code('./run.sh'), ' sudah menyalakan service ini otomatis. Kalau belum, cek log ', code('/tmp/wy-nine-idn-tts.log'), ' dan jalankan ulang ', code('./run.sh'), '. Setelah itu tekan ', code('\u21bb refresh voices'), ' di panel ini.'),
+    p(b('Bingung dengan M1…M5 / F1…F5?'), ' Penjelasan lengkap setiap voice (gender, karakter, dan use-case) ada di section berikutnya: ',
+      el('a', { href: '#/help#supertonic-voices', onclick: (e) => { e.preventDefault(); const node = document.getElementById('help-supertonic-voices'); if (node) node.scrollIntoView({ behavior: 'smooth' }); } }, 'Supertonic voice guide →')),
+  );
+}
+
+function supertonicVoicesHelp() {
+  return section('supertonic-voices', 'Supertonic voice guide — M1…M5, F1…F5',
+    p(b('Konvensi penamaan'), ' — nama voice Supertonic mengikuti pola ',
+      code('<gender><nomor>'), ': ', b('M'), ' = male / pria, ', b('F'), ' = female / wanita, ',
+      'angka ', code('1'), '–', code('5'), ' adalah varian preset dengan karakter, nada, dan timbre yang berbeda. ',
+      'Total ada 10 voice resmi yang dirilis bersama setiap rilis Supertonic 3.'),
+    p(b('Naming convention'), ' — Supertonic voice names follow ',
+      code('<gender><index>'), ': ', b('M'), ' for male, ', b('F'), ' for female, ',
+      'and ', code('1'), '–', code('5'), ' selects one of five preset variants per gender, ',
+      'each with a distinct timbre, energy, and use-case profile. Ten voices ship in every Supertonic 3 release.'),
+    callout('',
+      getLocale() === 'id' ? 'Sumber resmi' : 'Authoritative source',
+      getLocale() === 'id'
+        ? 'Deskripsi di bawah disalin (dan diterjemahkan) dari katalog voice resmi Supertonic: '
+        : 'The descriptions below are taken (and translated) from the official Supertonic voice catalogue: ',
+      el('a', { href: 'https://supertone-inc.github.io/supertonic-py/voices/', target: '_blank', rel: 'noopener' },
+        'supertonic-py/voices'), '.',
+    ),
+    p(b(getLocale() === 'id' ? 'Tips memilih voice' : 'How to pick'), ' — ',
+      getLocale() === 'id'
+        ? 'mulai dari M1 / F1 untuk narasi serbaguna, lalu coba varian lain sesuai kebutuhan: M2/F1 untuk konten formal, M5/F5 untuk audiobook & relaksasi, F2 untuk konten ceria, F3 untuk berita & iklan.'
+        : 'start with M1 / F1 for general-purpose narration, then move to other variants as needed: M2/F1 for formal content, M5/F5 for audiobooks & relaxation, F2 for upbeat content, F3 for broadcast / commercials.'),
+    el('div', { id: 'help-supertonic-voices-body', style: { marginTop: '12px' } },
+      el('div', { class: 'muted', style: { fontSize: '12px' } },
+        getLocale() === 'id'
+          ? 'Memuat katalog voice dari /api/idn-tts/supertonic/voices… (service idn-tts harus berjalan; cek di sidebar).'
+          : 'Loading voice catalogue from /api/idn-tts/supertonic/voices… (idn-tts service must be running; check sidebar).'),
+    ),
   );
 }
 

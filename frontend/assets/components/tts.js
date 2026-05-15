@@ -4,6 +4,24 @@
 import { apiGet, apiJSON, apiDelete } from '../api.js';
 import { defaultModel, getState, modelList, refreshKind, refreshUpstream } from '../store.js';
 import { clear, download, el, empty, fmtBytes, fmtDate, loading, toastError, toastGood, toastWarn } from '../ui.js';
+import { t, getLocale, pickLocale } from '../i18n.js';
+
+// Cache the Supertonic voice catalogue once we have it so we can render
+// inline descriptions next to the selected voice without re-fetching.
+let _supertonicVoiceMeta = null;
+async function ensureSupertonicVoiceMeta() {
+  if (_supertonicVoiceMeta) return _supertonicVoiceMeta;
+  try {
+    const info = await apiGet('/api/idn-tts/supertonic/voices');
+    if (info && Array.isArray(info.voices)) {
+      _supertonicVoiceMeta = {};
+      for (const v of info.voices) {
+        if (v && v.name) _supertonicVoiceMeta[v.name] = v;
+      }
+    }
+  } catch (_) {}
+  return _supertonicVoiceMeta || {};
+}
 
 const LS = 'nine.tts.prefs';
 const state = { model: '', text: '', voice: '', langFilter: '', speed: 1.2 };
@@ -66,8 +84,8 @@ async function buildView(root) {
 
   root.append(el('div', { class: 'page-head' },
     el('div', {},
-      el('h2', {}, 'Speak'),
-      el('p', { class: 'sub' }, 'Pick a voice, type what to say. Output is saved.'),
+      el('h2', {}, t('tts.title')),
+      el('p', { class: 'sub' }, t('tts.subtitle')),
     ),
     el('div', { class: 'inline' },
       el('button', {
@@ -77,9 +95,9 @@ async function buildView(root) {
           await refreshKind('tts');
           await refreshUpstream();
           await buildView(root);
-          toastGood('Refreshed');
+          toastGood(t('btn.refresh'));
         },
-      }, '↻ refresh voices'),
+      }, t('btn.refreshVoices')),
     ),
   ));
 
@@ -138,6 +156,7 @@ async function buildView(root) {
       updatePlaceholder();
       updateSpeedVisibility();
       updateLangVisibility();
+      updateSupertonicCaption();
     },
   });
   modelSel.append(buildGroupedOptions(sorted, state.model));
@@ -178,7 +197,39 @@ async function buildView(root) {
     oninput: (e) => { state.langFilter = e.target.value; savePrefs(); refreshVoices(); },
   });
   const voiceSel = el('select');
-  const voicesHint = el('div', { class: 'hint' }, 'Voices come from /v1/audio/voices per provider.');
+  const voicesHint = el('div', { class: 'hint' }, t('tts.voice.hint'));
+  // Supertonic voice description caption: surfaces the official voice
+  // metadata (gender + bilingual description + use-cases) for the
+  // currently selected supertonic/<voice> model.
+  const supertonicCaption = el('div', { class: 'hint mt-xs', style: { display: 'none', borderLeft: '2px solid var(--accent)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 'var(--r-sm)' } });
+  async function updateSupertonicCaption() {
+    const m = state.model || '';
+    if (!m.startsWith('supertonic/')) {
+      supertonicCaption.style.display = 'none';
+      supertonicCaption.innerHTML = '';
+      return;
+    }
+    const voiceName = m.split('/')[1] || '';
+    const meta = (await ensureSupertonicVoiceMeta())[voiceName];
+    if (!meta) {
+      supertonicCaption.style.display = 'none';
+      return;
+    }
+    const desc = pickLocale(meta.description);
+    const useCases = pickLocale(meta.use_cases);
+    const genderKey = 'tts.voice.gender.' + (meta.gender || 'custom');
+    supertonicCaption.innerHTML = '';
+    supertonicCaption.append(
+      el('div', { class: 'inline', style: { gap: '6px', alignItems: 'center', marginBottom: '4px' } },
+        el('strong', { style: { color: 'var(--ink)' } }, voiceName),
+        el('span', { class: 'badge-uppercase accent' }, t(genderKey)),
+      ),
+      el('div', { style: { color: 'var(--ink-muted)', fontSize: '12px' } }, desc),
+      useCases ? el('div', { class: 'muted', style: { fontSize: '11px', marginTop: '4px' } },
+        el('strong', {}, t('tts.voice.useCases') + ': '), useCases) : null,
+    );
+    supertonicCaption.style.display = '';
+  }
 
   const textTA = el('textarea', {
     rows: 5,
@@ -324,6 +375,7 @@ async function buildView(root) {
   }
   // Refresh visibility when the model dropdown changes
   modelSel.addEventListener('change', updateLangVisibility);
+  modelSel.addEventListener('change', updateSupertonicCaption);
 
   root.append(el('div', { class: 'card' },
     el('div', { class: 'grid cols-2' },
@@ -337,6 +389,7 @@ async function buildView(root) {
         el('label', {}, 'Voice override (optional)'),
         el('div', { class: 'inline', style: { gap: '6px' } }, langIn, voiceSel),
         voicesHint,
+        supertonicCaption,
       ),
     ),
     el('div', { class: 'field mt-md' },
@@ -355,6 +408,7 @@ async function buildView(root) {
 
   renderCoquiHint();
   updateLangVisibility();
+  updateSupertonicCaption();
   await refreshVoices();
   await reloadList();
 
