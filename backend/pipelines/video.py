@@ -385,22 +385,40 @@ async def _synthesize_voice(
             raise RuntimeError("Coqui voice missing: e.g. coqui/wibowo")
         if not idn.enabled or not await idn.is_reachable():
             raise RuntimeError(
-                "Indonesian TTS service unreachable; restart ./run.sh and verify "
-                "/api/idn-tts/status before generating video."
+                "Coqui (Indonesian) TTS unreachable. Restart ./run.sh and verify "
+                "/api/idn-tts/status shows loaded:true before generating video."
             )
         blob, _ctype = await idn.speak(text, speaker, speed=1.05)
         out_path.write_bytes(blob)
         return
 
-    # Local Supertonic (on-device)
+    # Local Supertonic (on-device). Note: we use supertonic_is_reachable()
+    # which only checks the SDK is enabled on the idn-tts service — the
+    # actual ONNX model is lazy-loaded by the service on first synthesise
+    # call, so a 'not loaded yet' state is fine here. Trying idn.is_reachable()
+    # instead would falsely fail when only Coqui is unloaded.
     if is_supertonic_model(tts_model) or is_supertonic_model(voice):
         v = ""
         if is_supertonic_model(voice):
             v = supertonic_voice_from_model(voice)
         elif is_supertonic_model(tts_model):
             v = supertonic_voice_from_model(tts_model)
-        if not idn.enabled or not await idn.is_reachable():
-            raise RuntimeError("Supertonic requires the local idn-tts service.")
+        if not v:
+            raise RuntimeError("Supertonic voice missing: e.g. supertonic/M1")
+        if not idn.enabled:
+            raise RuntimeError("Local idn-tts service is disabled (IDN_TTS_ENABLED=false in .env).")
+        if not await idn.supertonic_is_reachable():
+            raise RuntimeError(
+                "Supertonic SDK is not available. Either the local idn-tts service is down, "
+                "or supertonic isn't installed in the idn-tts conda env (pip install supertonic)."
+            )
+        # Pre-warm: kick a background load and let the synth call block on it
+        # via the service's internal lock. supertonic_speak has a 180 s timeout
+        # which is plenty for the first-call ~260 MB download.
+        try:
+            await idn.supertonic_load()
+        except Exception:
+            pass
         blob, _ctype = await idn.supertonic_speak(text, voice=v, language=language, speed=1.05)
         out_path.write_bytes(blob)
         return
