@@ -88,6 +88,15 @@ echo "[install-skills] source:     $GRAND_SKILLS_REPO"
 echo "[install-skills] dest:       $DEST"
 echo
 
+# Source .env so the upstream configure pre-flight (added in 619f01e) sees
+# the right NINEROUTER_URL when probing the local gateway. Without this it
+# falls back to scanning ports 9000 / 11434 / etc., and on a machine that
+# also runs Ollama (port 11434) it would mis-detect Ollama as 9Router.
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
+  # shellcheck disable=SC1091
+  set -a; source "$PROJECT_ROOT/.env"; set +a
+fi
+
 # Forward all flags (--dry-run / --force / --verbose / --no-deps / --no-conflicts)
 # to the upstream bootstrap script.
 bash "$GRAND_SKILLS_REPO/scripts/bootstrap.sh" \

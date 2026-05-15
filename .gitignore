@@ -56,6 +56,7 @@ social-media/
 # upstream pack at github.com/Wayan123/my-grand-project-skills.
 # See SKILLS.md for the chosen profile and rationale.
 .agents/skills/
+.skills-config.yaml
 .skill-evolution/
 .adaptive-architect/
 
